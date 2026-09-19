@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SessionResponse {
 
- String get token;@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId get driverId;@JsonKey(name: 'expires_in') int get expiresIn;
+ String get accessToken; String get refreshToken; int get expiresIn; String get tokenType; AuthenticatedAccount get user;
 /// Create a copy of SessionResponse
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $SessionResponseCopyWith<SessionResponse> get copyWith => _$SessionResponseCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionResponse&&(identical(other.token, token) || other.token == token)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.expiresIn, expiresIn) || other.expiresIn == expiresIn));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionResponse&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.expiresIn, expiresIn) || other.expiresIn == expiresIn)&&(identical(other.tokenType, tokenType) || other.tokenType == tokenType)&&(identical(other.user, user) || other.user == user));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,token,driverId,expiresIn);
+int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,expiresIn,tokenType,user);
 
 @override
 String toString() {
-  return 'SessionResponse(token: $token, driverId: $driverId, expiresIn: $expiresIn)';
+  return 'SessionResponse(accessToken: $accessToken, refreshToken: $refreshToken, expiresIn: $expiresIn, tokenType: $tokenType, user: $user)';
 }
 
 
@@ -48,11 +48,11 @@ abstract mixin class $SessionResponseCopyWith<$Res>  {
   factory $SessionResponseCopyWith(SessionResponse value, $Res Function(SessionResponse) _then) = _$SessionResponseCopyWithImpl;
 @useResult
 $Res call({
- String token,@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId driverId,@JsonKey(name: 'expires_in') int expiresIn
+ String accessToken, String refreshToken, int expiresIn, String tokenType, AuthenticatedAccount user
 });
 
 
-
+$AuthenticatedAccountCopyWith<$Res> get user;
 
 }
 /// @nodoc
@@ -65,15 +65,26 @@ class _$SessionResponseCopyWithImpl<$Res>
 
 /// Create a copy of SessionResponse
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? token = null,Object? driverId = null,Object? expiresIn = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? accessToken = null,Object? refreshToken = null,Object? expiresIn = null,Object? tokenType = null,Object? user = null,}) {
   return _then(_self.copyWith(
-token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
-as String,driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as DriverId,expiresIn: null == expiresIn ? _self.expiresIn : expiresIn // ignore: cast_nullable_to_non_nullable
-as int,
+accessToken: null == accessToken ? _self.accessToken : accessToken // ignore: cast_nullable_to_non_nullable
+as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
+as String,expiresIn: null == expiresIn ? _self.expiresIn : expiresIn // ignore: cast_nullable_to_non_nullable
+as int,tokenType: null == tokenType ? _self.tokenType : tokenType // ignore: cast_nullable_to_non_nullable
+as String,user: null == user ? _self.user : user // ignore: cast_nullable_to_non_nullable
+as AuthenticatedAccount,
   ));
 }
-
+/// Create a copy of SessionResponse
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$AuthenticatedAccountCopyWith<$Res> get user {
+  
+  return $AuthenticatedAccountCopyWith<$Res>(_self.user, (value) {
+    return _then(_self.copyWith(user: value));
+  });
+}
 }
 
 
@@ -155,10 +166,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String token, @JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId, @JsonKey(name: 'expires_in')  int expiresIn)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  int expiresIn,  String tokenType,  AuthenticatedAccount user)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SessionResponse() when $default != null:
-return $default(_that.token,_that.driverId,_that.expiresIn);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.expiresIn,_that.tokenType,_that.user);case _:
   return orElse();
 
 }
@@ -176,10 +187,10 @@ return $default(_that.token,_that.driverId,_that.expiresIn);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String token, @JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId, @JsonKey(name: 'expires_in')  int expiresIn)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  int expiresIn,  String tokenType,  AuthenticatedAccount user)  $default,) {final _that = this;
 switch (_that) {
 case _SessionResponse():
-return $default(_that.token,_that.driverId,_that.expiresIn);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.expiresIn,_that.tokenType,_that.user);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -196,10 +207,10 @@ return $default(_that.token,_that.driverId,_that.expiresIn);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String token, @JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId, @JsonKey(name: 'expires_in')  int expiresIn)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String accessToken,  String refreshToken,  int expiresIn,  String tokenType,  AuthenticatedAccount user)?  $default,) {final _that = this;
 switch (_that) {
 case _SessionResponse() when $default != null:
-return $default(_that.token,_that.driverId,_that.expiresIn);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.expiresIn,_that.tokenType,_that.user);case _:
   return null;
 
 }
@@ -211,12 +222,14 @@ return $default(_that.token,_that.driverId,_that.expiresIn);case _:
 @JsonSerializable()
 
 class _SessionResponse implements SessionResponse {
-  const _SessionResponse({required this.token, @JsonKey(name: 'driver_id')@DriverIdConverter() required this.driverId, @JsonKey(name: 'expires_in') required this.expiresIn});
+  const _SessionResponse({required this.accessToken, required this.refreshToken, required this.expiresIn, required this.tokenType, required this.user});
   factory _SessionResponse.fromJson(Map<String, dynamic> json) => _$SessionResponseFromJson(json);
 
-@override final  String token;
-@override@JsonKey(name: 'driver_id')@DriverIdConverter() final  DriverId driverId;
-@override@JsonKey(name: 'expires_in') final  int expiresIn;
+@override final  String accessToken;
+@override final  String refreshToken;
+@override final  int expiresIn;
+@override final  String tokenType;
+@override final  AuthenticatedAccount user;
 
 /// Create a copy of SessionResponse
 /// with the given fields replaced by the non-null parameter values.
@@ -231,16 +244,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionResponse&&(identical(other.token, token) || other.token == token)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.expiresIn, expiresIn) || other.expiresIn == expiresIn));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionResponse&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.expiresIn, expiresIn) || other.expiresIn == expiresIn)&&(identical(other.tokenType, tokenType) || other.tokenType == tokenType)&&(identical(other.user, user) || other.user == user));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,token,driverId,expiresIn);
+int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,expiresIn,tokenType,user);
 
 @override
 String toString() {
-  return 'SessionResponse(token: $token, driverId: $driverId, expiresIn: $expiresIn)';
+  return 'SessionResponse(accessToken: $accessToken, refreshToken: $refreshToken, expiresIn: $expiresIn, tokenType: $tokenType, user: $user)';
 }
 
 
@@ -251,11 +264,11 @@ abstract mixin class _$SessionResponseCopyWith<$Res> implements $SessionResponse
   factory _$SessionResponseCopyWith(_SessionResponse value, $Res Function(_SessionResponse) _then) = __$SessionResponseCopyWithImpl;
 @override @useResult
 $Res call({
- String token,@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId driverId,@JsonKey(name: 'expires_in') int expiresIn
+ String accessToken, String refreshToken, int expiresIn, String tokenType, AuthenticatedAccount user
 });
 
 
-
+@override $AuthenticatedAccountCopyWith<$Res> get user;
 
 }
 /// @nodoc
@@ -268,16 +281,27 @@ class __$SessionResponseCopyWithImpl<$Res>
 
 /// Create a copy of SessionResponse
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? token = null,Object? driverId = null,Object? expiresIn = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? accessToken = null,Object? refreshToken = null,Object? expiresIn = null,Object? tokenType = null,Object? user = null,}) {
   return _then(_SessionResponse(
-token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
-as String,driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as DriverId,expiresIn: null == expiresIn ? _self.expiresIn : expiresIn // ignore: cast_nullable_to_non_nullable
-as int,
+accessToken: null == accessToken ? _self.accessToken : accessToken // ignore: cast_nullable_to_non_nullable
+as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
+as String,expiresIn: null == expiresIn ? _self.expiresIn : expiresIn // ignore: cast_nullable_to_non_nullable
+as int,tokenType: null == tokenType ? _self.tokenType : tokenType // ignore: cast_nullable_to_non_nullable
+as String,user: null == user ? _self.user : user // ignore: cast_nullable_to_non_nullable
+as AuthenticatedAccount,
   ));
 }
 
-
+/// Create a copy of SessionResponse
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$AuthenticatedAccountCopyWith<$Res> get user {
+  
+  return $AuthenticatedAccountCopyWith<$Res>(_self.user, (value) {
+    return _then(_self.copyWith(user: value));
+  });
+}
 }
 
 // dart format on

@@ -46,7 +46,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(
-      const DriverSession(driverId: DriverId(0), token: ''),
+      const DriverSession(driverId: DriverId(0), token: '', refreshToken: 'refresh-token'),
     );
   });
 
@@ -67,7 +67,7 @@ void main() {
     when(() => orders.watchActiveOrder()).thenAnswer((_) => orderCtrl.stream);
     when(() => conn.sessionExpired).thenAnswer((_) => expiredCtrl.stream);
     when(() => session.currentSession()).thenAnswer(
-      (_) async => const DriverSession(driverId: DriverId(1), token: 't'),
+      (_) async => const DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'refresh-token'),
     );
     when(() => conn.connect(any())).thenAnswer((_) async {});
     when(

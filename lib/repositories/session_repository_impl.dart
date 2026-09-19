@@ -1,9 +1,7 @@
 import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/login_request.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/models/session_response.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
 import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
@@ -21,26 +19,26 @@ class SessionRepositoryImpl implements SessionRepository {
 
   @override
   Future<Result<DriverSession>> login({
-    required String phone,
+    required String email,
     required String password,
   }) async {
     try {
-      final SessionResponse res = await _api.login(
-        new LoginRequest(phone: phone, password: password),
+      final SessionResponse auth = await _api.login(
+        new LoginRequest(email: email, password: password),
       );
 
-      final DriverSession session = new DriverSession(
-        driverId: res.driverId,
-        token: res.token,
+      final DriverProfileEnvelope profile = await _api.me(
+        _bearer(auth.accessToken),
       );
 
-      final DateTime expiresAt = clock.now().toUtc().add(
-        new Duration(seconds: res.expiresIn),
+      return await _remember(
+        new DriverSession(
+          driverId: profile.data.id,
+          token: auth.accessToken,
+          refreshToken: auth.refreshToken,
+        ),
+        auth.expiresIn,
       );
-
-      await _store.save(session, expiresAt);
-
-      return new Ok<DriverSession>(session);
     } on DioException catch (e) {
       return new Err<DriverSession>(_mapDio(e));
     } on Object {
@@ -49,47 +47,81 @@ class SessionRepositoryImpl implements SessionRepository {
   }
 
   @override
-  Future<Result<RegisterResponse>> register({
+  Future<Result<DriverSession>> register({
+    required String email,
+    required String password,
     required String name,
     required String phone,
-    required String password,
     required String vehiclePlate,
     required int capacityKg,
   }) async {
     try {
-      final RegisterResponse res = await _api.register(
-        new RegisterRequest(
-          name: name,
-          phone: phone,
+      final CourierRegistrationResponse registered = await _api.registerCourier(
+        new RegisterCourierRequest(
+          email: email,
           password: password,
+          fullName: name,
+          phoneNumber: phone,
           vehiclePlate: vehiclePlate,
           capacityKg: capacityKg,
         ),
       );
 
-      return new Ok<RegisterResponse>(res);
+      return await _remember(
+        new DriverSession(
+          driverId: registered.driverId,
+          token: registered.accessToken,
+          refreshToken: registered.refreshToken,
+        ),
+        registered.expiresIn,
+      );
     } on DioException catch (e) {
-      return new Err<RegisterResponse>(_mapDio(e));
+      return new Err<DriverSession>(_mapDio(e));
     } on Object {
-      return const Err<RegisterResponse>(NetworkFailure());
+      return const Err<DriverSession>(NetworkFailure());
     }
   }
 
+  Future<Result<DriverSession>> _remember(
+    DriverSession session,
+    int expiresIn,
+  ) async {
+    await _store.save(
+      session,
+      clock.now().toUtc().add(new Duration(seconds: expiresIn)),
+    );
+
+    return new Ok<DriverSession>(session);
+  }
+
+  String _bearer(String token) => 'Bearer $token';
+
   Failure _mapDio(DioException e) {
-    AppLogger.debug('login failed: HTTP ${e.response?.statusCode}');
+    AppLogger.debug('auth failed: HTTP ${e.response?.statusCode}');
     final Object? responseData = e.response?.data;
     final Map<String, dynamic>? dataMap = responseData is Map<String, dynamic>
         ? responseData
         : null;
 
     return switch (e.response?.statusCode) {
-      401 => const AuthFailure('invalid phone or password'),
+      401 => const AuthFailure('invalid email or password'),
       403 => const PendingApprovalFailure(),
-      400 => const ChannelFailure('phone and password are required'),
+      404 => const RegistrationIncompleteFailure(),
+      409 => new AuthFailure(
+        dataMap?['message']?.toString() ??
+            'an account with that email already exists',
+      ),
+      400 => new ChannelFailure(
+        dataMap?['message']?.toString() ?? 'check the details and try again',
+      ),
       422 => new ChannelFailure(
         dataMap != null && dataMap['errors'] != null
             ? dataMap['errors'].toString()
             : 'registration validation failed',
+      ),
+      503 => new ChannelFailure(
+        dataMap?['message']?.toString() ??
+            'the fleet could not be reached; submit the same details again to finish',
       ),
       _ => const NetworkFailure(),
     };

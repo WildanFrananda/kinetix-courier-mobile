@@ -3,16 +3,20 @@ import 'package:fleet_pulse_mobile/models/models.dart';
 
 abstract interface class SessionRepository {
   Future<DriverSession?> currentSession();
+
   Future<Result<DriverSession>> login({
-    required String phone,
+    required String email,
     required String password,
   });
-  Future<Result<RegisterResponse>> register({
+
+  Future<Result<DriverSession>> register({
+    required String email,
+    required String password,
     required String name,
     required String phone,
-    required String password,
     required String vehiclePlate,
     required int capacityKg,
   });
+
   Future<void> logout();
 }

@@ -8,16 +8,18 @@ part of 'session_response.dart';
 
 _SessionResponse _$SessionResponseFromJson(Map<String, dynamic> json) =>
     _SessionResponse(
-      token: json['token'] as String,
-      driverId: const DriverIdConverter().fromJson(
-        (json['driver_id'] as num).toInt(),
-      ),
-      expiresIn: (json['expires_in'] as num).toInt(),
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String,
+      expiresIn: (json['expiresIn'] as num).toInt(),
+      tokenType: json['tokenType'] as String,
+      user: AuthenticatedAccount.fromJson(json['user'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$SessionResponseToJson(_SessionResponse instance) =>
     <String, dynamic>{
-      'token': instance.token,
-      'driver_id': const DriverIdConverter().toJson(instance.driverId),
-      'expires_in': instance.expiresIn,
+      'accessToken': instance.accessToken,
+      'refreshToken': instance.refreshToken,
+      'expiresIn': instance.expiresIn,
+      'tokenType': instance.tokenType,
+      'user': instance.user,
     };

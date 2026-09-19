@@ -1,5 +1,7 @@
 import 'package:fleet_pulse_mobile/core/core.dart';
+import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
+import 'package:fleet_pulse_mobile/routes/app_route.dart';
 import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
@@ -11,6 +13,7 @@ class RegisterViewModel extends ChangeNotifier {
   final AppRouterState _router;
   final SessionRepository _session;
 
+  String _email = '';
   String _name = '';
   String _phone = '';
   String _password = '';
@@ -24,18 +27,34 @@ class RegisterViewModel extends ChangeNotifier {
   String? get error => _error;
   String? get successMessage => _successMessage;
 
+  void setEmail(String v) => _email = v.trim();
   void setName(String v) => _name = v.trim();
   void setPhone(String v) => _phone = v.trim();
   void setPassword(String v) => _password = v;
   void setVehiclePlate(String v) => _vehiclePlate = v.trim();
-  void setCapacityKg(String v) => _capacityKg = int.tryParse(v) ?? 0;
+  void setCapacityKg(String v) => _capacityKg = int.tryParse(v) ?? -1;
 
   Future<void> submit() async {
-    if (_name.isEmpty ||
+    if (_email.isEmpty ||
+        _name.isEmpty ||
         _phone.isEmpty ||
         _password.isEmpty ||
         _vehiclePlate.isEmpty) {
       _error = 'All fields are required';
+      notifyListeners();
+
+      return;
+    }
+
+    if (!_email.contains('@')) {
+      _error = 'Enter a valid email address';
+      notifyListeners();
+
+      return;
+    }
+
+    if (_capacityKg <= 0) {
+      _error = 'Capacity must be a number greater than zero';
       notifyListeners();
 
       return;
@@ -54,6 +73,7 @@ class RegisterViewModel extends ChangeNotifier {
     notifyListeners();
 
     final res = await _session.register(
+      email: _email,
       name: _name,
       phone: _phone,
       password: _password,
@@ -62,10 +82,12 @@ class RegisterViewModel extends ChangeNotifier {
     );
 
     res.fold(
-      (response) {
+      (DriverSession _) {
         _submitting = false;
-        _successMessage = response.message;
+        _successMessage =
+            'Registration received. An administrator will approve your account.';
         notifyListeners();
+        _router.replaceAll(const PendingApprovalRoute());
       },
       (Failure f) {
         _error = f.message;

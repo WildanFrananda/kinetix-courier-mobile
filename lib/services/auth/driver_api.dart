@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/models/login_request.dart';
+import 'package:fleet_pulse_mobile/config/app_config.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/models/session_response.dart';
 import 'package:retrofit/retrofit.dart';
 
 part 'driver_api.g.dart';
@@ -10,9 +9,16 @@ part 'driver_api.g.dart';
 abstract class DriverApi {
   factory DriverApi(Dio dio, {String baseUrl}) = _DriverApi;
 
-  @POST('/api/v1/auth/login')
+  @POST('${AppConfig.couriersPath}/register')
+  Future<CourierRegistrationResponse> registerCourier(
+    @Body() RegisterCourierRequest body,
+  );
+
+  @POST('${AppConfig.authPath}/login')
   Future<SessionResponse> login(@Body() LoginRequest body);
 
-  @POST('/driver/register')
-  Future<RegisterResponse> register(@Body() RegisterRequest body);
+  @GET('${AppConfig.matchingPath}/driver/me')
+  Future<DriverProfileEnvelope> me(
+    @Header('Authorization') String authorization,
+  );
 }

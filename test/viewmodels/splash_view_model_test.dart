@@ -27,7 +27,7 @@ void main() {
   test('stored session routes to Tracking', () {
     fakeAsync((async) {
       when(() => session.currentSession()).thenAnswer(
-        (_) async => const DriverSession(driverId: DriverId(1), token: 't'),
+        (_) async => const DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'refresh-token'),
       );
       final AppRouterState router = new AppRouterState();
       new SplashViewModel(router, session);

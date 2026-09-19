@@ -42,9 +42,19 @@ void main() {
     when(() => vm.successMessage).thenReturn(null);
   });
 
-  testWidgets('renders 5 fields and submits', (WidgetTester tester) async {
+  testWidgets('renders every field and submits', (WidgetTester tester) async {
     await _pump(tester, vm);
-    expect(find.byType(TextField), findsNWidgets(5));
+    expect(find.byType(TextField), findsNWidgets(6));
+    for (final String label in <String>[
+      'Full Name',
+      'Email',
+      'Phone Number',
+      'Password (min. 12 characters)',
+      'Vehicle Plate (e.g. B 1234 XYZ)',
+      'Vehicle Capacity (kg)',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: 'missing field: $label');
+    }
     final Finder submit = find.widgetWithText(
       FilledButton,
       'Submit Registration',
@@ -52,6 +62,17 @@ void main() {
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     verify(() => vm.submit()).called(1);
+  });
+
+  testWidgets('typing an email reaches the view model', (WidgetTester tester) async {
+    when(() => vm.setEmail(any())).thenReturn(null);
+    await _pump(tester, vm);
+
+    final Finder email = find.widgetWithText(TextField, 'Email');
+    await tester.ensureVisible(email);
+    await tester.enterText(email, 'driver@kinetix.test');
+
+    verify(() => vm.setEmail('driver@kinetix.test')).called(1);
   });
 
   testWidgets('shows error message', (WidgetTester tester) async {

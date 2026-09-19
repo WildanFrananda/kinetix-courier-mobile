@@ -40,6 +40,7 @@ void main() {
   const DriverSession session = DriverSession(
     driverId: DriverId(1),
     token: 'tok',
+    refreshToken: 'refresh-tok',
   );
 
   test('joins driver topic and connects on ok reply', () async {

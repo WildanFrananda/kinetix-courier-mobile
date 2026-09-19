@@ -21,33 +21,38 @@ class FakeSession implements SessionRepository {
 
   @override
   Future<Result<DriverSession>> login({
-    required String phone,
+    required String email,
     required String password,
   }) async {
     if (pendingApproval) {
       return const Err<DriverSession>(PendingApprovalFailure());
     }
 
-    stored = const DriverSession(driverId: DriverId(1), token: 't');
+    stored = const DriverSession(
+      driverId: DriverId(1),
+      token: 't',
+      refreshToken: 'refresh-token',
+    );
 
     return Ok<DriverSession>(stored!);
   }
 
   @override
-  Future<Result<RegisterResponse>> register({
+  Future<Result<DriverSession>> register({
+    required String email,
+    required String password,
     required String name,
     required String phone,
-    required String password,
     required String vehiclePlate,
     required int capacityKg,
   }) async {
-    return const Ok<RegisterResponse>(
-      RegisterResponse(
-        message:
-            'Registration successful. Your account is pending admin approval.',
-        driverId: DriverId(1),
-      ),
+    stored = const DriverSession(
+      driverId: DriverId(1),
+      token: 't',
+      refreshToken: 'refresh-token',
     );
+
+    return Ok<DriverSession>(stored!);
   }
 
   @override
@@ -104,9 +109,7 @@ class FakeOrders implements OrderRepository {
     OrderId orderId, {
     String? podPhotoUrl,
     String? podSignature,
-  }) async =>
-      const Ok<Unit>(Unit.unit);
-
+  }) async => const Ok<Unit>(Unit.unit);
 
   void dispose() {
     unawaited(_orders.close());

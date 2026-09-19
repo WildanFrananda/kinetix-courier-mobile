@@ -29,7 +29,7 @@ void main() {
       ),
     );
     registerFallbackValue(
-      const DriverSession(driverId: DriverId(0), token: ''),
+      const DriverSession(driverId: DriverId(0), token: '', refreshToken: 'refresh-token'),
     );
   });
 
@@ -100,7 +100,9 @@ void main() {
     when(
       () => channel.connect(any(), wsBase: any(named: 'wsBase')),
     ).thenAnswer((_) async {});
-    await sut.connect(const DriverSession(driverId: DriverId(1), token: 't'));
+    await sut.connect(
+      const DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+    );
     verify(
       () => channel.connect(any(), wsBase: any(named: 'wsBase')),
     ).called(1);

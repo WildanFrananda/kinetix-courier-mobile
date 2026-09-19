@@ -46,5 +46,12 @@ class PendingApprovalFailure extends Failure {
   String get message => 'account pending approval';
 }
 
+class RegistrationIncompleteFailure extends Failure {
+  const RegistrationIncompleteFailure();
+
+  @override
+  String get message => 'vehicle registration was never completed';
+}
+
 Failure failureFromReason(String? reason) =>
     ChannelFailure(reason ?? 'unknown');

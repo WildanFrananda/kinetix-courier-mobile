@@ -10,11 +10,13 @@ class TokenStore {
   final FlutterSecureStorage _storage;
 
   static const String _kToken = 'driver_token';
+  static const String _kRefreshToken = 'driver_refresh_token';
   static const String _kDriverId = 'driver_id';
   static const String _kExpiresAt = 'expires_at';
 
   Future<void> save(DriverSession session, DateTime expiresAt) async {
     await _storage.write(key: _kToken, value: session.token);
+    await _storage.write(key: _kRefreshToken, value: session.refreshToken);
     await _storage.write(
       key: _kDriverId,
       value: session.driverId.value.toString(),
@@ -27,10 +29,11 @@ class TokenStore {
 
   Future<DriverSession?> read() async {
     final String? token = await _storage.read(key: _kToken);
+    final String? refreshToken = await _storage.read(key: _kRefreshToken);
     final String? id = await _storage.read(key: _kDriverId);
     final String? expiresAtStr = await _storage.read(key: _kExpiresAt);
 
-    if (token == null || id == null || expiresAtStr == null) {
+    if (token == null || refreshToken == null || id == null || expiresAtStr == null) {
       return null;
     }
 
@@ -47,11 +50,16 @@ class TokenStore {
       return null;
     }
 
-    return new DriverSession(driverId: new DriverId(parsed), token: token);
+    return new DriverSession(
+      driverId: new DriverId(parsed),
+      token: token,
+      refreshToken: refreshToken,
+    );
   }
 
   Future<void> clear() async {
     await _storage.delete(key: _kToken);
+    await _storage.delete(key: _kRefreshToken);
     await _storage.delete(key: _kDriverId);
     await _storage.delete(key: _kExpiresAt);
   }

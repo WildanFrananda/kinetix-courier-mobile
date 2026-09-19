@@ -20,9 +20,10 @@ class LoginScreen extends StatelessWidget {
             const Text('FleetPulse Driver', textAlign: TextAlign.center),
             const SizedBox(height: 24),
             TextField(
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
-              onChanged: vm.setPhone,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Email'),
+              onChanged: vm.setEmail,
             ),
             const SizedBox(height: 12),
             TextField(

@@ -28,6 +28,13 @@ class RegisterScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             TextField(
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Email'),
+              onChanged: vm.setEmail,
+            ),
+            const SizedBox(height: 12),
+            TextField(
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(labelText: 'Phone Number'),
               onChanged: vm.setPhone,

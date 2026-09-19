@@ -25,7 +25,7 @@ void main() {
     expect(sut.error, isNotNull);
     verifyNever(
       () => session.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     );
@@ -34,16 +34,20 @@ void main() {
   test('successful login routes to Tracking', () async {
     when(
       () => session.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenAnswer(
       (_) async => const Ok<DriverSession>(
-        DriverSession(driverId: DriverId(1), token: 't'),
+        DriverSession(
+          driverId: DriverId(1),
+          token: 't',
+          refreshToken: 'refresh-token',
+        ),
       ),
     );
     sut
-      ..setPhone('0812')
+      ..setEmail('driver@kinetix.test')
       ..setPassword('secret');
     await sut.submit();
     expect(router.stack.last, isA<TrackingRoute>());
@@ -52,29 +56,46 @@ void main() {
   test('failed login surfaces the message', () async {
     when(
       () => session.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenAnswer((_) async => const Err<DriverSession>(AuthFailure()));
     sut
-      ..setPhone('0812')
+      ..setEmail('driver@kinetix.test')
       ..setPassword('wrong');
     await sut.submit();
     expect(sut.error, 'session expired');
     expect(router.stack.last, isA<SplashRoute>());
   });
 
+  test('an incomplete registration routes to the register form', () async {
+    when(
+      () => session.login(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    ).thenAnswer(
+      (_) async => const Err<DriverSession>(RegistrationIncompleteFailure()),
+    );
+    sut
+      ..setEmail('driver@kinetix.test')
+      ..setPassword('secret');
+    await sut.submit();
+    expect(router.stack.last, isA<RegisterRoute>());
+    expect(sut.error, contains('vehicle'));
+  });
+
   test('pending approval routes to PendingApprovalRoute', () async {
     when(
       () => session.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenAnswer(
       (_) async => const Err<DriverSession>(PendingApprovalFailure()),
     );
     sut
-      ..setPhone('0812')
+      ..setEmail('driver@kinetix.test')
       ..setPassword('secret');
     await sut.submit();
     expect(router.stack.last, isA<PendingApprovalRoute>());

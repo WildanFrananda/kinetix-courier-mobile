@@ -12,7 +12,7 @@ class LoginViewModel extends ChangeNotifier {
   final AppRouterState _router;
   final SessionRepository _session;
 
-  String _phone = '';
+  String _email = '';
   String _password = '';
   bool _submitting = false;
   String? _error;
@@ -20,12 +20,12 @@ class LoginViewModel extends ChangeNotifier {
   bool get submitting => _submitting;
   String? get error => _error;
 
-  void setPhone(String v) => _phone = v.trim();
+  void setEmail(String v) => _email = v.trim();
   void setPassword(String v) => _password = v;
 
   Future<void> submit() async {
-    if (_phone.isEmpty || _password.isEmpty) {
-      _error = 'phone and password required';
+    if (_email.isEmpty || _password.isEmpty) {
+      _error = 'email and password required';
       notifyListeners();
 
       return;
@@ -35,13 +35,22 @@ class LoginViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final res = await _session.login(phone: _phone, password: _password);
+    final res = await _session.login(email: _email, password: _password);
 
     res.fold((_) => _router.replaceAll(const TrackingRoute()), (Failure f) {
       _submitting = false;
 
       if (f is PendingApprovalFailure) {
         _router.push(const PendingApprovalRoute());
+
+        return;
+      }
+
+      if (f is RegistrationIncompleteFailure) {
+        _error =
+            'Your account has no vehicle yet. Finish registering to continue.';
+        notifyListeners();
+        _router.push(const RegisterRoute());
 
         return;
       }
