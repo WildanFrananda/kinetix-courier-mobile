@@ -87,11 +87,11 @@ void main() {
       );
 
   Future<Result<DriverSession>> login() =>
-      sut.login(email: 'driver@kinetix.test', password: 'supersecret1234');
+      sut.login(email: 'driver@kinetix.test', password: 'fixture-password-not-real');
 
   Future<Result<DriverSession>> register() => sut.register(
     email: 'driver@kinetix.test',
-    password: 'supersecret1234',
+    password: 'fixture-password-not-real',
     name: 'Budi Santoso',
     phone: '081200000000',
     vehiclePlate: 'B 1234 KIN',
