@@ -52,6 +52,11 @@ void main() {
       ),
     ).thenAnswer((_) async => const Ok<Unit>(Unit.unit));
 
+    when(() => orders.attachPodPhoto(any(), any())).thenAnswer(
+      (_) async =>
+          const Ok<String>('https://storage.test/kinetix-pod/pod/5/a.jpg'),
+    );
+
     sut = new OrderViewModel(router, orders, maps);
   });
 
@@ -84,9 +89,56 @@ void main() {
   test('delivered ok pops the route', () async {
     router.push(new OrderRoute(order: _order(OrderStatus.pickedUp)));
     sut.bind(_order(OrderStatus.pickedUp));
+    await sut.attachPhoto('/tmp/photo.jpg');
     await sut.delivered();
     expect(router.stack.last, isA<SplashRoute>());
   });
+
+  test('a delivery cannot be marked before its photo is uploaded', () async {
+    sut.bind(_order(OrderStatus.pickedUp));
+
+    expect(sut.canDeliver, isFalse);
+    await sut.delivered();
+
+    verifyNever(
+      () => orders.delivered(
+        any(),
+        podPhotoUrl: any(named: 'podPhotoUrl'),
+        podSignature: any(named: 'podSignature'),
+      ),
+    );
+  });
+
+  test('the uploaded photo is what the delivery names', () async {
+    sut.bind(_order(OrderStatus.pickedUp));
+
+    await sut.attachPhoto('/tmp/photo.jpg');
+
+    expect(sut.canDeliver, isTrue);
+    await sut.delivered();
+    verify(
+      () => orders.delivered(
+        const OrderId(5),
+        podPhotoUrl: 'https://storage.test/kinetix-pod/pod/5/a.jpg',
+        podSignature: any(named: 'podSignature'),
+      ),
+    ).called(1);
+  });
+
+  test(
+    'a photo that could not be uploaded leaves the delivery locked',
+    () async {
+      when(
+        () => orders.attachPodPhoto(any(), any()),
+      ).thenAnswer((_) async => const Err<String>(PodPhotoFailure()));
+      sut.bind(_order(OrderStatus.pickedUp));
+
+      await sut.attachPhoto('/tmp/photo.jpg');
+
+      expect(sut.canDeliver, isFalse);
+      expect((sut.state as OrderShowing).error, isA<PodPhotoFailure>());
+    },
+  );
 
   test('server cancel switches to OrderCancelled', () async {
     sut.bind(_order(OrderStatus.assigned));

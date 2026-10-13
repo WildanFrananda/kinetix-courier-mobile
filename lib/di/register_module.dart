@@ -17,6 +17,16 @@ abstract class RegisterModule {
   );
 
   @lazySingleton
+  @Named('storage')
+  Dio get storageDio => new Dio(
+    new BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      sendTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 30),
+    ),
+  );
+
+  @lazySingleton
   DriverApi driverApi(Dio dio) => new DriverApi(dio);
 
   @lazySingleton

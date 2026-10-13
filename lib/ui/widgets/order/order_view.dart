@@ -16,7 +16,7 @@ class _OrderView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool canPickup = order.status == OrderStatus.assigned;
-    final bool canDeliver = order.status == OrderStatus.pickedUp;
+    final bool pickedUp = order.status == OrderStatus.pickedUp;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,7 +44,7 @@ class _OrderView extends StatelessWidget {
             onPressed: vm.navigateToDropoff,
           ),
         ),
-        if (canDeliver) ...<Widget>[
+        if (pickedUp) ...<Widget>[
           const Divider(height: 24),
           const Text(
             'Proof of Delivery (POD)',
@@ -62,17 +62,24 @@ class _OrderView extends StatelessWidget {
                     color: vm.podPhotoUrl != null ? Colors.green : null,
                   ),
                   label: Text(
-                    vm.podPhotoUrl != null ? 'Photo Attached' : 'Capture Photo',
+                    vm.photoUploading
+                        ? 'Uploading Photo'
+                        : vm.podPhotoUrl != null
+                        ? 'Photo Attached'
+                        : 'Capture Photo',
                   ),
-                  onPressed: () async {
-                    final ImagePicker picker = ImagePicker();
-                    final XFile? photo = await picker.pickImage(
-                      source: ImageSource.camera,
-                    );
-                    if (photo != null) {
-                      vm.setPodPhoto(photo.path);
-                    }
-                  },
+                  onPressed: vm.photoUploading
+                      ? null
+                      : () async {
+                          final ImagePicker picker = ImagePicker();
+                          final XFile? photo = await picker.pickImage(
+                            source: ImageSource.camera,
+                          );
+
+                          if (photo != null) {
+                            await vm.attachPhoto(photo.path);
+                          }
+                        },
                 ),
               ),
               const SizedBox(width: 8),
@@ -91,37 +98,39 @@ class _OrderView extends StatelessWidget {
                       penColor: Colors.black,
                       exportBackgroundColor: Colors.white,
                     );
-                    final Uint8List? signatureBytes = await showDialog<Uint8List>(
-                      context: context,
-                      builder: (BuildContext ctx) {
-                        return AlertDialog(
-                          title: const Text('Customer Signature'),
-                          content: SizedBox(
-                            width: 300,
-                            height: 200,
-                            child: Signature(
-                              controller: controller,
-                              backgroundColor: Colors.grey.shade200,
-                            ),
-                          ),
-                          actions: <Widget>[
-                            TextButton(
-                              onPressed: controller.clear,
-                              child: const Text('Clear'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () async {
-                                final Uint8List? bytes = await controller.toPngBytes();
-                                if (ctx.mounted) {
-                                  Navigator.of(ctx).pop(bytes);
-                                }
-                              },
-                              child: const Text('Save'),
-                            ),
-                          ],
+                    final Uint8List? signatureBytes =
+                        await showDialog<Uint8List>(
+                          context: context,
+                          builder: (BuildContext ctx) {
+                            return AlertDialog(
+                              title: const Text('Customer Signature'),
+                              content: SizedBox(
+                                width: 300,
+                                height: 200,
+                                child: Signature(
+                                  controller: controller,
+                                  backgroundColor: Colors.grey.shade200,
+                                ),
+                              ),
+                              actions: <Widget>[
+                                TextButton(
+                                  onPressed: controller.clear,
+                                  child: const Text('Clear'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    final Uint8List? bytes = await controller
+                                        .toPngBytes();
+                                    if (ctx.mounted) {
+                                      Navigator.of(ctx).pop(bytes);
+                                    }
+                                  },
+                                  child: const Text('Save'),
+                                ),
+                              ],
+                            );
+                          },
                         );
-                      },
-                    );
                     if (signatureBytes != null && signatureBytes.isNotEmpty) {
                       final String base64Sig =
                           'data:image/png;base64,${base64Encode(signatureBytes)}';
@@ -155,11 +164,11 @@ class _OrderView extends StatelessWidget {
                   : const Text('Mark as Picked Up'),
             ),
           ),
-        if (canDeliver)
+        if (pickedUp)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: submitting ? null : vm.delivered,
+              onPressed: vm.canDeliver ? vm.delivered : null,
               child: submitting
                   ? const SizedBox.square(
                       dimension: 20,

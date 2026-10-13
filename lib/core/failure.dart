@@ -39,6 +39,13 @@ class PermissionFailure extends Failure {
   final String message;
 }
 
+class PodPhotoFailure extends Failure {
+  const PodPhotoFailure();
+
+  @override
+  String get message => 'the photo could not be uploaded';
+}
+
 class PendingApprovalFailure extends Failure {
   const PendingApprovalFailure();
 

@@ -36,6 +36,8 @@ import 'package:fleet_pulse_mobile/services/foreground/foreground_service_manage
     as _i333;
 import 'package:fleet_pulse_mobile/services/location/location_service.dart'
     as _i826;
+import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart'
+    as _i465;
 import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart' as _i598;
 import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart' as _i962;
 import 'package:fleet_pulse_mobile/viewmodels/pending_approval_view_model.dart'
@@ -71,8 +73,21 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i333.ForegroundServiceManager(),
     );
     gh.lazySingleton<_i826.LocationService>(() => _i826.LocationService());
+    gh.lazySingleton<_i361.Dio>(
+      () => registerModule.storageDio,
+      instanceName: 'storage',
+    );
     gh.lazySingleton<_i996.TokenStore>(
       () => _i996.TokenStore(gh<_i558.FlutterSecureStorage>()),
+    );
+    gh.lazySingleton<_i465.PodPhotoUploader>(
+      () => _i465.PodPhotoUploader(gh<_i361.Dio>(instanceName: 'storage')),
+    );
+    gh.lazySingleton<_i933.OrderRepository>(
+      () => _i549.OrderRepositoryImpl(
+        gh<_i700.ChannelClient>(),
+        gh<_i465.PodPhotoUploader>(),
+      ),
     );
     gh.lazySingleton<_i738.DriverApi>(
       () => registerModule.driverApi(gh<_i361.Dio>()),
@@ -82,9 +97,6 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i891.ConnectionRepository>(
       () => _i458.ConnectionRepositoryImpl(gh<_i700.ChannelClient>()),
-    );
-    gh.lazySingleton<_i933.OrderRepository>(
-      () => _i549.OrderRepositoryImpl(gh<_i700.ChannelClient>()),
     );
     gh.lazySingleton<_i85.TelemetryRepository>(
       () => _i70.TelemetryRepositoryImpl(

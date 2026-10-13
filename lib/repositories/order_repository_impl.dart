@@ -4,14 +4,16 @@ import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart';
 import 'package:fleet_pulse_mobile/state/state.dart';
 import 'package:injectable/injectable.dart' hide Order;
 
 @LazySingleton(as: OrderRepository)
 class OrderRepositoryImpl with RetryMixin implements OrderRepository {
-  OrderRepositoryImpl(this._channel);
+  OrderRepositoryImpl(this._channel, this._uploader);
 
   final ChannelClient _channel;
+  final PodPhotoUploader _uploader;
 
   @override
   Stream<Order?> watchActiveOrder() async* {
@@ -34,6 +36,34 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
   @override
   Future<Result<Unit>> pickup(OrderId orderId) =>
       retry(() => _lifecycle(() => _channel.pickup(orderId.value)));
+
+  @override
+  Future<Result<String>> attachPodPhoto(
+    OrderId orderId,
+    String localPath,
+  ) async {
+    final ChannelReply reply;
+
+    try {
+      reply = await _channel.podUpload(orderId.value);
+    } on Object {
+      return const Err<String>(NetworkFailure());
+    }
+
+    if (!reply.isOk) {
+      return new Err<String>(failureFromReason(reply.reason));
+    }
+
+    final PodUpload upload = PodUpload.fromJson(reply.response);
+
+    try {
+      await _uploader.upload(upload.uploadUrl, localPath);
+    } on Object {
+      return const Err<String>(PodPhotoFailure());
+    }
+
+    return new Ok<String>(upload.photoUrl);
+  }
 
   @override
   Future<Result<Unit>> delivered(
@@ -79,7 +109,9 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
       'order_assigned' => new OrderAssignedEvent(
         Order.fromJson(asOrder(e.payload)),
       ),
-      'order_updated' => new OrderUpdatedEvent(Order.fromJson(asOrder(e.payload))),
+      'order_updated' => new OrderUpdatedEvent(
+        Order.fromJson(asOrder(e.payload)),
+      ),
       _ => null,
     };
   }

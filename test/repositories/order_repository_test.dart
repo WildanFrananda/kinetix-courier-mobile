@@ -1,17 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/order_repository_impl.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockChannel extends Mock implements ChannelClient {}
 
+class _MockUploader extends Mock implements PodPhotoUploader {}
+
 void main() {
   late _MockChannel channel;
+  late _MockUploader uploader;
   late StreamController<ChannelEvent> events;
   late OrderRepositoryImpl sut;
 
@@ -26,9 +31,10 @@ void main() {
 
   setUp(() {
     channel = new _MockChannel();
+    uploader = new _MockUploader();
     events = StreamController<ChannelEvent>.broadcast();
     when(() => channel.events).thenAnswer((_) => events.stream);
-    sut = new OrderRepositoryImpl(channel);
+    sut = new OrderRepositoryImpl(channel, uploader);
   });
 
   tearDown(() => events.close());
@@ -100,5 +106,71 @@ void main() {
         podSignature: 'sig.svg',
       ),
     ).called(1);
+  });
+
+  test(
+    'attachPodPhoto uploads to the address matching issued and answers its photo url',
+    () async {
+      when(() => channel.podUpload(any())).thenAnswer(
+        (_) async => const ChannelReply('ok', <String, dynamic>{
+          'upload_url':
+              'https://storage.test/kinetix-pod/pod/1/a.jpg?X-Amz-Signature=s',
+          'photo_url': 'https://storage.test/kinetix-pod/pod/1/a.jpg',
+        }),
+      );
+      when(() => uploader.upload(any(), any())).thenAnswer((_) async {});
+
+      final Result<String> res = await sut.attachPodPhoto(
+        const OrderId(1),
+        '/tmp/photo.jpg',
+      );
+
+      expect(res, isA<Ok<String>>());
+      expect(
+        (res as Ok<String>).value,
+        'https://storage.test/kinetix-pod/pod/1/a.jpg',
+      );
+      verify(
+        () => uploader.upload(
+          'https://storage.test/kinetix-pod/pod/1/a.jpg?X-Amz-Signature=s',
+          '/tmp/photo.jpg',
+        ),
+      ).called(1);
+    },
+  );
+
+  test('attachPodPhoto refused by matching uploads nothing', () async {
+    when(() => channel.podUpload(any())).thenAnswer(
+      (_) async => const ChannelReply('error', <String, dynamic>{
+        'reason': 'invalid_transition',
+      }),
+    );
+
+    final Result<String> res = await sut.attachPodPhoto(
+      const OrderId(1),
+      '/tmp/photo.jpg',
+    );
+
+    expect(res, isA<Err<String>>());
+    verifyNever(() => uploader.upload(any(), any()));
+  });
+
+  test('attachPodPhoto whose upload fails is a photo failure', () async {
+    when(() => channel.podUpload(any())).thenAnswer(
+      (_) async => const ChannelReply('ok', <String, dynamic>{
+        'upload_url': 'https://storage.test/u',
+        'photo_url': 'https://storage.test/p',
+      }),
+    );
+    when(
+      () => uploader.upload(any(), any()),
+    ).thenThrow(const FileSystemException('gone'));
+
+    final Result<String> res = await sut.attachPodPhoto(
+      const OrderId(1),
+      '/tmp/photo.jpg',
+    );
+
+    expect((res as Err<String>).failure, isA<PodPhotoFailure>());
   });
 }

@@ -31,7 +31,8 @@ class ChannelClient {
       new StreamController<ChannelEvent>.broadcast();
   final StreamController<ConnectionStatus> _statusCtrl =
       new StreamController<ConnectionStatus>.broadcast();
-  final StreamController<void> _authCtrl = new StreamController<void>.broadcast();
+  final StreamController<void> _authCtrl =
+      new StreamController<void>.broadcast();
 
   final Map<String, Completer<ChannelReply>> _pending =
       <String, Completer<ChannelReply>>{};
@@ -84,6 +85,9 @@ class ChannelClient {
 
   Future<ChannelReply> pickup(int orderId) =>
       push('pickup', <String, dynamic>{'order_id': orderId});
+
+  Future<ChannelReply> podUpload(int orderId) =>
+      push('pod_upload', <String, dynamic>{'order_id': orderId});
 
   Future<ChannelReply> delivered(
     int orderId, {

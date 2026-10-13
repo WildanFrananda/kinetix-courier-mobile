@@ -45,12 +45,32 @@ class OrderViewModel extends ChangeNotifier {
 
   String? _podPhotoUrl;
   String? _podSignature;
+  bool _photoUploading = false;
 
   String? get podPhotoUrl => _podPhotoUrl;
   String? get podSignature => _podSignature;
+  bool get photoUploading => _photoUploading;
 
-  void setPodPhoto(String photoUrl) {
-    _podPhotoUrl = photoUrl;
+  bool get canDeliver =>
+      _podPhotoUrl != null && !_photoUploading && !_submitting;
+
+  Future<void> attachPhoto(String localPath) async {
+    final Order? order = _order;
+
+    if (order == null) {
+      return;
+    }
+
+    _photoUploading = true;
+    _error = null;
+    notifyListeners();
+
+    final res = await _orders.attachPodPhoto(order.id, localPath);
+
+    res.fold((String photoUrl) => _podPhotoUrl = photoUrl, (Failure f) {
+      _error = f;
+    });
+    _photoUploading = false;
     notifyListeners();
   }
 
@@ -79,7 +99,7 @@ class OrderViewModel extends ChangeNotifier {
   Future<void> delivered() async {
     final Order? order = _order;
 
-    if (order == null) {
+    if (order == null || !canDeliver) {
       return;
     }
 
@@ -98,7 +118,6 @@ class OrderViewModel extends ChangeNotifier {
       notifyListeners();
     });
   }
-
 
   Future<void> navigateToPickup() async {
     final Order? o = _order;
