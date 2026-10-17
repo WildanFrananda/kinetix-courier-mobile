@@ -105,6 +105,13 @@ class FakeOrders implements OrderRepository {
   Future<Result<Unit>> pickup(OrderId orderId) async =>
       const Ok<Unit>(Unit.unit);
   @override
+  Future<Result<String>> attachPodPhoto(
+    OrderId orderId,
+    String localPath,
+  ) async => new Ok<String>(
+    'https://storage.kinetix.test/kinetix-pod/pod/${orderId.value}/photo.jpg',
+  );
+  @override
   Future<Result<Unit>> delivered(
     OrderId orderId, {
     String? podPhotoUrl,

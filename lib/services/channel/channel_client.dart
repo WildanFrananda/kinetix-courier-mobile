@@ -86,8 +86,10 @@ class ChannelClient {
   Future<ChannelReply> pickup(int orderId) =>
       push('pickup', <String, dynamic>{'order_id': orderId});
 
-  Future<ChannelReply> podUpload(int orderId) =>
-      push('pod_upload', <String, dynamic>{'order_id': orderId});
+  Future<ChannelReply> podUpload(int orderId, String photoSha256) => push(
+    'pod_upload',
+    <String, dynamic>{'order_id': orderId, 'photo_sha256': photoSha256},
+  );
 
   Future<ChannelReply> delivered(
     int orderId, {

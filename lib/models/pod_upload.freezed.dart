@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$PodUpload {
 
-@JsonKey(name: 'upload_url') String get uploadUrl;@JsonKey(name: 'photo_url') String get photoUrl;
+@JsonKey(name: 'upload_url') String get uploadUrl;@JsonKey(name: 'photo_url') String get photoUrl;@JsonKey(name: 'upload_headers') Map<String, String> get uploadHeaders;
 /// Create a copy of PodUpload
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $PodUploadCopyWith<PodUpload> get copyWith => _$PodUploadCopyWithImpl<PodUpload>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PodUpload&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.photoUrl, photoUrl) || other.photoUrl == photoUrl));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PodUpload&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.photoUrl, photoUrl) || other.photoUrl == photoUrl)&&const DeepCollectionEquality().equals(other.uploadHeaders, uploadHeaders));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,uploadUrl,photoUrl);
+int get hashCode => Object.hash(runtimeType,uploadUrl,photoUrl,const DeepCollectionEquality().hash(uploadHeaders));
 
 @override
 String toString() {
-  return 'PodUpload(uploadUrl: $uploadUrl, photoUrl: $photoUrl)';
+  return 'PodUpload(uploadUrl: $uploadUrl, photoUrl: $photoUrl, uploadHeaders: $uploadHeaders)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $PodUploadCopyWith<$Res>  {
   factory $PodUploadCopyWith(PodUpload value, $Res Function(PodUpload) _then) = _$PodUploadCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'upload_url') String uploadUrl,@JsonKey(name: 'photo_url') String photoUrl
+@JsonKey(name: 'upload_url') String uploadUrl,@JsonKey(name: 'photo_url') String photoUrl,@JsonKey(name: 'upload_headers') Map<String, String> uploadHeaders
 });
 
 
@@ -65,11 +65,12 @@ class _$PodUploadCopyWithImpl<$Res>
 
 /// Create a copy of PodUpload
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? uploadUrl = null,Object? photoUrl = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? uploadUrl = null,Object? photoUrl = null,Object? uploadHeaders = null,}) {
   return _then(_self.copyWith(
 uploadUrl: null == uploadUrl ? _self.uploadUrl : uploadUrl // ignore: cast_nullable_to_non_nullable
 as String,photoUrl: null == photoUrl ? _self.photoUrl : photoUrl // ignore: cast_nullable_to_non_nullable
-as String,
+as String,uploadHeaders: null == uploadHeaders ? _self.uploadHeaders : uploadHeaders // ignore: cast_nullable_to_non_nullable
+as Map<String, String>,
   ));
 }
 
@@ -154,10 +155,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl, @JsonKey(name: 'upload_headers')  Map<String, String> uploadHeaders)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PodUpload() when $default != null:
-return $default(_that.uploadUrl,_that.photoUrl);case _:
+return $default(_that.uploadUrl,_that.photoUrl,_that.uploadHeaders);case _:
   return orElse();
 
 }
@@ -175,10 +176,10 @@ return $default(_that.uploadUrl,_that.photoUrl);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl, @JsonKey(name: 'upload_headers')  Map<String, String> uploadHeaders)  $default,) {final _that = this;
 switch (_that) {
 case _PodUpload():
-return $default(_that.uploadUrl,_that.photoUrl);case _:
+return $default(_that.uploadUrl,_that.photoUrl,_that.uploadHeaders);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -195,10 +196,10 @@ return $default(_that.uploadUrl,_that.photoUrl);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'upload_url')  String uploadUrl, @JsonKey(name: 'photo_url')  String photoUrl, @JsonKey(name: 'upload_headers')  Map<String, String> uploadHeaders)?  $default,) {final _that = this;
 switch (_that) {
 case _PodUpload() when $default != null:
-return $default(_that.uploadUrl,_that.photoUrl);case _:
+return $default(_that.uploadUrl,_that.photoUrl,_that.uploadHeaders);case _:
   return null;
 
 }
@@ -210,11 +211,18 @@ return $default(_that.uploadUrl,_that.photoUrl);case _:
 @JsonSerializable()
 
 class _PodUpload implements PodUpload {
-  const _PodUpload({@JsonKey(name: 'upload_url') required this.uploadUrl, @JsonKey(name: 'photo_url') required this.photoUrl});
+  const _PodUpload({@JsonKey(name: 'upload_url') required this.uploadUrl, @JsonKey(name: 'photo_url') required this.photoUrl, @JsonKey(name: 'upload_headers') final  Map<String, String> uploadHeaders = const <String, String>{}}): _uploadHeaders = uploadHeaders;
   factory _PodUpload.fromJson(Map<String, dynamic> json) => _$PodUploadFromJson(json);
 
 @override@JsonKey(name: 'upload_url') final  String uploadUrl;
 @override@JsonKey(name: 'photo_url') final  String photoUrl;
+ final  Map<String, String> _uploadHeaders;
+@override@JsonKey(name: 'upload_headers') Map<String, String> get uploadHeaders {
+  if (_uploadHeaders is EqualUnmodifiableMapView) return _uploadHeaders;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_uploadHeaders);
+}
+
 
 /// Create a copy of PodUpload
 /// with the given fields replaced by the non-null parameter values.
@@ -229,16 +237,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PodUpload&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.photoUrl, photoUrl) || other.photoUrl == photoUrl));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PodUpload&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.photoUrl, photoUrl) || other.photoUrl == photoUrl)&&const DeepCollectionEquality().equals(other._uploadHeaders, _uploadHeaders));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,uploadUrl,photoUrl);
+int get hashCode => Object.hash(runtimeType,uploadUrl,photoUrl,const DeepCollectionEquality().hash(_uploadHeaders));
 
 @override
 String toString() {
-  return 'PodUpload(uploadUrl: $uploadUrl, photoUrl: $photoUrl)';
+  return 'PodUpload(uploadUrl: $uploadUrl, photoUrl: $photoUrl, uploadHeaders: $uploadHeaders)';
 }
 
 
@@ -249,7 +257,7 @@ abstract mixin class _$PodUploadCopyWith<$Res> implements $PodUploadCopyWith<$Re
   factory _$PodUploadCopyWith(_PodUpload value, $Res Function(_PodUpload) _then) = __$PodUploadCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'upload_url') String uploadUrl,@JsonKey(name: 'photo_url') String photoUrl
+@JsonKey(name: 'upload_url') String uploadUrl,@JsonKey(name: 'photo_url') String photoUrl,@JsonKey(name: 'upload_headers') Map<String, String> uploadHeaders
 });
 
 
@@ -266,11 +274,12 @@ class __$PodUploadCopyWithImpl<$Res>
 
 /// Create a copy of PodUpload
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? uploadUrl = null,Object? photoUrl = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? uploadUrl = null,Object? photoUrl = null,Object? uploadHeaders = null,}) {
   return _then(_PodUpload(
 uploadUrl: null == uploadUrl ? _self.uploadUrl : uploadUrl // ignore: cast_nullable_to_non_nullable
 as String,photoUrl: null == photoUrl ? _self.photoUrl : photoUrl // ignore: cast_nullable_to_non_nullable
-as String,
+as String,uploadHeaders: null == uploadHeaders ? _self._uploadHeaders : uploadHeaders // ignore: cast_nullable_to_non_nullable
+as Map<String, String>,
   ));
 }
 

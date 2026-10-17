@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/mixins/retry_mixin.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
@@ -42,10 +45,19 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
     OrderId orderId,
     String localPath,
   ) async {
+    final Uint8List bytes;
+
+    try {
+      bytes = await _uploader.read(localPath);
+    } on Object {
+      return const Err<String>(PodPhotoFailure());
+    }
+
+    final String photoSha256 = sha256.convert(bytes).toString();
     final ChannelReply reply;
 
     try {
-      reply = await _channel.podUpload(orderId.value);
+      reply = await _channel.podUpload(orderId.value, photoSha256);
     } on Object {
       return const Err<String>(NetworkFailure());
     }
@@ -57,7 +69,7 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
     final PodUpload upload = PodUpload.fromJson(reply.response);
 
     try {
-      await _uploader.upload(upload.uploadUrl, localPath);
+      await _uploader.upload(upload.uploadUrl, bytes, upload.uploadHeaders);
     } on Object {
       return const Err<String>(PodPhotoFailure());
     }

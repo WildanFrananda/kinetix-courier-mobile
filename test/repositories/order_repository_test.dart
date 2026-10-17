@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
@@ -28,6 +32,11 @@ void main() {
     'dropoff': <String, dynamic>{'latitude': 3.0, 'longitude': 4.0},
     'assigned_at': '2026-01-01T00:00:00Z',
   };
+
+  setUpAll(() {
+    registerFallbackValue(new Uint8List(0));
+    registerFallbackValue(<String, String>{});
+  });
 
   setUp(() {
     channel = new _MockChannel();
@@ -108,17 +117,28 @@ void main() {
     ).called(1);
   });
 
+  final Uint8List photo = new Uint8List.fromList(utf8.encode('abc'));
+  const String photoSha256 =
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+
   test(
-    'attachPodPhoto uploads to the address matching issued and answers its photo url',
+    "attachPodPhoto asks for an address bound to the photo's SHA-256 and puts the bytes with the headers matching signed",
     () async {
-      when(() => channel.podUpload(any())).thenAnswer(
+      when(() => uploader.read(any())).thenAnswer((_) async => photo);
+      when(() => channel.podUpload(any(), any())).thenAnswer(
         (_) async => const ChannelReply('ok', <String, dynamic>{
           'upload_url':
-              'https://storage.test/kinetix-pod/pod/1/a.jpg?X-Amz-Signature=s',
-          'photo_url': 'https://storage.test/kinetix-pod/pod/1/a.jpg',
+              'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg?X-Amz-Signature=s',
+          'upload_headers': <String, dynamic>{
+            'if-none-match': '*',
+            'x-amz-checksum-sha256':
+                'ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=',
+          },
+          'photo_url':
+              'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg',
         }),
       );
-      when(() => uploader.upload(any(), any())).thenAnswer((_) async {});
+      when(() => uploader.upload(any(), any(), any())).thenAnswer((_) async {});
 
       final Result<String> res = await sut.attachPodPhoto(
         const OrderId(1),
@@ -128,19 +148,55 @@ void main() {
       expect(res, isA<Ok<String>>());
       expect(
         (res as Ok<String>).value,
-        'https://storage.test/kinetix-pod/pod/1/a.jpg',
+        'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg',
       );
+      verify(() => uploader.read('/tmp/photo.jpg')).called(1);
+      verify(() => channel.podUpload(1, photoSha256)).called(1);
       verify(
         () => uploader.upload(
-          'https://storage.test/kinetix-pod/pod/1/a.jpg?X-Amz-Signature=s',
-          '/tmp/photo.jpg',
+          'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg?X-Amz-Signature=s',
+          photo,
+          <String, String>{
+            'if-none-match': '*',
+            'x-amz-checksum-sha256':
+                'ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=',
+          },
+        ),
+      ).called(1);
+    },
+  );
+
+  test(
+    'attachPodPhoto against a matching that signs no headers puts the bytes with none',
+    () async {
+      when(() => uploader.read(any())).thenAnswer((_) async => photo);
+      when(() => channel.podUpload(any(), any())).thenAnswer(
+        (_) async => const ChannelReply('ok', <String, dynamic>{
+          'upload_url': 'https://storage.test/u',
+          'photo_url': 'https://storage.test/p',
+        }),
+      );
+      when(() => uploader.upload(any(), any(), any())).thenAnswer((_) async {});
+
+      final Result<String> res = await sut.attachPodPhoto(
+        const OrderId(1),
+        '/tmp/photo.jpg',
+      );
+
+      expect(res, isA<Ok<String>>());
+      verify(
+        () => uploader.upload(
+          'https://storage.test/u',
+          photo,
+          const <String, String>{},
         ),
       ).called(1);
     },
   );
 
   test('attachPodPhoto refused by matching uploads nothing', () async {
-    when(() => channel.podUpload(any())).thenAnswer(
+    when(() => uploader.read(any())).thenAnswer((_) async => photo);
+    when(() => channel.podUpload(any(), any())).thenAnswer(
       (_) async => const ChannelReply('error', <String, dynamic>{
         'reason': 'invalid_transition',
       }),
@@ -152,19 +208,37 @@ void main() {
     );
 
     expect(res, isA<Err<String>>());
-    verifyNever(() => uploader.upload(any(), any()));
+    verifyNever(() => uploader.upload(any(), any(), any()));
   });
 
+  test(
+    'attachPodPhoto whose photo cannot be read asks matching for nothing',
+    () async {
+      when(
+        () => uploader.read(any()),
+      ).thenThrow(const FileSystemException('gone'));
+
+      final Result<String> res = await sut.attachPodPhoto(
+        const OrderId(1),
+        '/tmp/photo.jpg',
+      );
+
+      expect((res as Err<String>).failure, isA<PodPhotoFailure>());
+      verifyNever(() => channel.podUpload(any(), any()));
+    },
+  );
+
   test('attachPodPhoto whose upload fails is a photo failure', () async {
-    when(() => channel.podUpload(any())).thenAnswer(
+    when(() => uploader.read(any())).thenAnswer((_) async => photo);
+    when(() => channel.podUpload(any(), any())).thenAnswer(
       (_) async => const ChannelReply('ok', <String, dynamic>{
         'upload_url': 'https://storage.test/u',
         'photo_url': 'https://storage.test/p',
       }),
     );
     when(
-      () => uploader.upload(any(), any()),
-    ).thenThrow(const FileSystemException('gone'));
+      () => uploader.upload(any(), any(), any()),
+    ).thenThrow(new DioException(requestOptions: new RequestOptions()));
 
     final Result<String> res = await sut.attachPodPhoto(
       const OrderId(1),
