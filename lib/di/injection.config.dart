@@ -29,6 +29,7 @@ import 'package:fleet_pulse_mobile/repositories/telemetry_repository_impl.dart'
     as _i70;
 import 'package:fleet_pulse_mobile/routes/app_router_state.dart' as _i34;
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart' as _i738;
+import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart' as _i246;
 import 'package:fleet_pulse_mobile/services/auth/token_store.dart' as _i996;
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart'
     as _i700;
@@ -95,8 +96,15 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i68.PendingApprovalViewModel>(
       () => _i68.PendingApprovalViewModel(gh<_i34.AppRouterState>()),
     );
+    gh.lazySingleton<_i246.SessionRenewer>(
+      () => _i246.SessionRenewer(gh<_i738.DriverApi>(), gh<_i996.TokenStore>()),
+    );
     gh.lazySingleton<_i891.ConnectionRepository>(
-      () => _i458.ConnectionRepositoryImpl(gh<_i700.ChannelClient>()),
+      () => _i458.ConnectionRepositoryImpl(
+        gh<_i700.ChannelClient>(),
+        gh<_i246.SessionRenewer>(),
+      ),
+      dispose: (i) => i.dispose(),
     );
     gh.lazySingleton<_i85.TelemetryRepository>(
       () => _i70.TelemetryRepositoryImpl(
@@ -106,17 +114,18 @@ extension GetItInjectableX on _i174.GetIt {
       ),
       dispose: (i) => i.dispose(),
     );
-    gh.lazySingleton<_i968.SessionRepository>(
-      () => _i670.SessionRepositoryImpl(
-        gh<_i738.DriverApi>(),
-        gh<_i996.TokenStore>(),
-      ),
-    );
     gh.factory<_i962.OrderViewModel>(
       () => _i962.OrderViewModel(
         gh<_i34.AppRouterState>(),
         gh<_i933.OrderRepository>(),
         gh<_i595.MapsLauncher>(),
+      ),
+    );
+    gh.lazySingleton<_i968.SessionRepository>(
+      () => _i670.SessionRepositoryImpl(
+        gh<_i738.DriverApi>(),
+        gh<_i996.TokenStore>(),
+        gh<_i246.SessionRenewer>(),
       ),
     );
     gh.factory<_i812.TrackingViewModel>(

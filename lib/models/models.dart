@@ -10,6 +10,7 @@ export 'lat_lng.dart';
 export 'login_request.dart';
 export 'order.dart';
 export 'pod_upload.dart';
+export 'refresh_request.dart';
 export 'register_courier_request.dart';
 export 'session_response.dart';
 export 'telemetry_ping.dart';

@@ -237,3 +237,23 @@ If the user asks: *"Create a Profile screen where a user can edit their name"*, 
    takes `AppRouterState` and `ProfileRepository` — the interface, not the impl).
 5. **UI Screen** — create `ProfileScreen` (Stateless, reads VM via `context.watch`).
 6. **Mapper Update** — add `ProfileRoute() => MaterialPage(child: _inject<ProfileViewModel>(const ProfileScreen()))` to the switch statement in `app_route_mapper.dart`.
+
+## 7. Decisions the code states but cannot explain
+
+### A refused session is renewed before the courier is signed out
+
+Identity's access token lives fifteen minutes and its refresh token thirty days. Until 2026-10-19 the app never
+used the refresh token: `TokenStore.read` forgot the session once the access token had expired, and a socket
+refused by matching signed the courier out. So a courier signed in again whenever the socket reconnected after
+fifteen minutes, and a signing-key rotation signed every courier out.
+
+`SessionRenewer` trades the refresh token for a new pair and stores both before anything uses them. It sends one
+request at a time for the whole app, because identity treats a refresh token presented twice as stolen and revokes
+the family. `400`/`401` means the refresh token is refused: the session is cleared. Anything else means identity
+did not answer, and the session is kept.
+
+`ConnectionRepositoryImpl` answers a refused socket by renewing and reconnecting. `sessionExpired` fires only when
+the renewal is refused, or when the socket is refused again before a renewed connection has held, which is a real
+refusal (an account deactivated, say) and must not loop. While identity cannot be reached it tries again after 1,
+2, 4 … up to 30 seconds, and at once when the app returns to the foreground. `SessionRepository.currentSession`
+renews an expired access token at start-up and keeps the stored session if identity cannot be reached.

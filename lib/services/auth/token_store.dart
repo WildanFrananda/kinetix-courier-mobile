@@ -33,20 +33,16 @@ class TokenStore {
     final String? id = await _storage.read(key: _kDriverId);
     final String? expiresAtStr = await _storage.read(key: _kExpiresAt);
 
-    if (token == null || refreshToken == null || id == null || expiresAtStr == null) {
+    if (token == null ||
+        refreshToken == null ||
+        id == null ||
+        expiresAtStr == null) {
       return null;
     }
 
     final int? parsed = int.tryParse(id);
-    final DateTime? expiresAt = DateTime.tryParse(expiresAtStr);
 
-    if (parsed == null || expiresAt == null) {
-      return null;
-    }
-
-    if (!clock.now().toUtc().isBefore(expiresAt)) {
-      await clear();
-
+    if (parsed == null || DateTime.tryParse(expiresAtStr) == null) {
       return null;
     }
 
@@ -55,6 +51,15 @@ class TokenStore {
       token: token,
       refreshToken: refreshToken,
     );
+  }
+
+  Future<bool> accessExpired() async {
+    final String? expiresAtStr = await _storage.read(key: _kExpiresAt);
+    final DateTime? expiresAt = expiresAtStr == null
+        ? null
+        : DateTime.tryParse(expiresAtStr);
+
+    return expiresAt == null || !clock.now().toUtc().isBefore(expiresAt);
   }
 
   Future<void> clear() async {

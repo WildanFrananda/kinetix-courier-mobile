@@ -4,6 +4,7 @@ import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository_impl.dart';
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
+import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
 import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -12,9 +13,12 @@ class _MockApi extends Mock implements DriverApi {}
 
 class _MockStore extends Mock implements TokenStore {}
 
+class _MockRenewer extends Mock implements SessionRenewer {}
+
 void main() {
   late _MockApi api;
   late _MockStore store;
+  late _MockRenewer renewer;
   late SessionRepositoryImpl sut;
 
   const AuthenticatedAccount account = AuthenticatedAccount(
@@ -72,7 +76,8 @@ void main() {
   setUp(() {
     api = new _MockApi();
     store = new _MockStore();
-    sut = new SessionRepositoryImpl(api, store);
+    renewer = new _MockRenewer();
+    sut = new SessionRepositoryImpl(api, store, renewer);
     when(() => store.save(any(), any())).thenAnswer((_) async {});
   });
 
@@ -86,8 +91,10 @@ void main() {
         ),
       );
 
-  Future<Result<DriverSession>> login() =>
-      sut.login(email: 'driver@kinetix.test', password: 'fixture-password-not-real');
+  Future<Result<DriverSession>> login() => sut.login(
+    email: 'driver@kinetix.test',
+    password: 'fixture-password-not-real',
+  );
 
   Future<Result<DriverSession>> register() => sut.register(
     email: 'driver@kinetix.test',
@@ -97,6 +104,67 @@ void main() {
     vehiclePlate: 'B 1234 KIN',
     capacityKg: 150,
   );
+
+  group('currentSession', () {
+    const DriverSession stored = DriverSession(
+      driverId: DriverId(9),
+      token: 'old',
+      refreshToken: 'refresh',
+    );
+    const DriverSession renewed = DriverSession(
+      driverId: DriverId(9),
+      token: 'new',
+      refreshToken: 'new-refresh',
+    );
+
+    test('is the stored session while its access token is fresh', () async {
+      when(() => store.read()).thenAnswer((_) async => stored);
+      when(() => store.accessExpired()).thenAnswer((_) async => false);
+
+      expect(await sut.currentSession(), stored);
+      verifyNever(() => renewer.renew());
+    });
+
+    test('renews an expired access token rather than signing out', () async {
+      when(() => store.read()).thenAnswer((_) async => stored);
+      when(() => store.accessExpired()).thenAnswer((_) async => true);
+      when(
+        () => renewer.renew(),
+      ).thenAnswer((_) async => const Ok<DriverSession>(renewed));
+
+      expect(await sut.currentSession(), renewed);
+    });
+
+    test('is no session once identity refuses the refresh token', () async {
+      when(() => store.read()).thenAnswer((_) async => stored);
+      when(() => store.accessExpired()).thenAnswer((_) async => true);
+      when(
+        () => renewer.renew(),
+      ).thenAnswer((_) async => const Err<DriverSession>(AuthFailure()));
+
+      expect(await sut.currentSession(), isNull);
+    });
+
+    test(
+      'keeps the stored session when identity cannot be reached, to renew later',
+      () async {
+        when(() => store.read()).thenAnswer((_) async => stored);
+        when(() => store.accessExpired()).thenAnswer((_) async => true);
+        when(
+          () => renewer.renew(),
+        ).thenAnswer((_) async => const Err<DriverSession>(NetworkFailure()));
+
+        expect(await sut.currentSession(), stored);
+      },
+    );
+
+    test('is no session when nothing is stored', () async {
+      when(() => store.read()).thenAnswer((_) async => null);
+
+      expect(await sut.currentSession(), isNull);
+      verifyNever(() => renewer.renew());
+    });
+  });
 
   group('login', () {
     test(

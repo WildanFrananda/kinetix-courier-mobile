@@ -54,17 +54,46 @@ void main() {
     });
   });
 
-  test('read clears and returns null when expired', () async {
-    when(() => storage.delete(key: any(named: 'key'))).thenAnswer((_) async {});
+  test(
+    'read keeps the session after the access token expires, for the refresh token to renew',
+    () async {
+      await withClock(Clock.fixed(fixedNow), () async {
+        stubReads(
+          token: 'abc',
+          id: '1',
+          expiresAt: fixedNow
+              .subtract(const Duration(days: 1))
+              .toIso8601String(),
+        );
+        final session = await sut.read();
+        expect(session, isNotNull);
+        expect(session!.refreshToken, 'refresh');
+      });
+      verifyNever(() => storage.delete(key: any(named: 'key')));
+    },
+  );
+
+  test('accessExpired is false before the access token expires', () async {
     await withClock(Clock.fixed(fixedNow), () async {
       stubReads(
         token: 'abc',
         id: '1',
-        expiresAt: fixedNow.subtract(const Duration(days: 1)).toIso8601String(),
+        expiresAt: fixedNow.add(const Duration(minutes: 1)).toIso8601String(),
       );
-      expect(await sut.read(), isNull);
+      expect(await sut.accessExpired(), isFalse);
     });
-    verify(() => storage.delete(key: 'driver_token')).called(1);
+  });
+
+  test('accessExpired is true once the access token has expired', () async {
+    await withClock(Clock.fixed(fixedNow), () async {
+      stubReads(token: 'abc', id: '1', expiresAt: fixedNow.toIso8601String());
+      expect(await sut.accessExpired(), isTrue);
+    });
+  });
+
+  test('accessExpired is true when no expiry is stored', () async {
+    stubReads(token: 'abc', id: '1', expiresAt: null);
+    expect(await sut.accessExpired(), isTrue);
   });
 
   test('read returns null when only the refresh token is missing', () async {

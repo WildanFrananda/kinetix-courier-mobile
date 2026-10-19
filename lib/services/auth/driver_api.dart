@@ -17,6 +17,9 @@ abstract class DriverApi {
   @POST('${AppConfig.authPath}/login')
   Future<SessionResponse> login(@Body() LoginRequest body);
 
+  @POST('${AppConfig.authPath}/refresh')
+  Future<SessionResponse> refresh(@Body() RefreshRequest body);
+
   @GET('${AppConfig.matchingPath}/driver/me')
   Future<DriverProfileEnvelope> me(
     @Header('Authorization') String authorization,

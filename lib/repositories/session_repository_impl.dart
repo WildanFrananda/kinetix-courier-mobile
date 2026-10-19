@@ -4,18 +4,32 @@ import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
+import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
 import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:injectable/injectable.dart';
 
 @LazySingleton(as: SessionRepository)
 class SessionRepositoryImpl implements SessionRepository {
-  SessionRepositoryImpl(this._api, this._store);
+  SessionRepositoryImpl(this._api, this._store, this._renewer);
 
   final DriverApi _api;
   final TokenStore _store;
+  final SessionRenewer _renewer;
 
   @override
-  Future<DriverSession?> currentSession() => _store.read();
+  Future<DriverSession?> currentSession() async {
+    final DriverSession? stored = await _store.read();
+
+    if (stored == null || !await _store.accessExpired()) {
+      return stored;
+    }
+
+    return switch (await _renewer.renew()) {
+      Ok<DriverSession>(:final DriverSession value) => value,
+      Err<DriverSession>(:final Failure failure) =>
+        failure is AuthFailure ? null : stored,
+    };
+  }
 
   @override
   Future<Result<DriverSession>> login({
