@@ -15,10 +15,19 @@ abstract class DriverApi {
   );
 
   @POST('${AppConfig.authPath}/login')
-  Future<SessionResponse> login(@Body() LoginRequest body);
+  Future<dynamic> login(@Body() LoginRequest body);
+
+  @POST('${AppConfig.authPath}/2fa/verify')
+  Future<SessionResponse> verifyTwoFactor(@Body() TwoFactorVerifyRequest body);
 
   @POST('${AppConfig.authPath}/refresh')
   Future<SessionResponse> refresh(@Body() RefreshRequest body);
+
+  @POST('${AppConfig.authPath}/logout')
+  Future<void> logout(
+    @Header('Authorization') String authorization,
+    @Body() LogoutRequest body,
+  );
 
   @GET('${AppConfig.matchingPath}/driver/me')
   Future<DriverProfileEnvelope> me(

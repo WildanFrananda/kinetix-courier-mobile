@@ -20,7 +20,7 @@ void main() {
     vm
       ..setEmail('driver@kinetix.test')
       ..setName('Budi')
-      ..setPhone('0812')
+      ..setPhone('081234567890')
       ..setPassword('supersecret1')
       ..setVehiclePlate('B 1234 XY')
       ..setCapacityKg('200');
@@ -152,4 +152,77 @@ void main() {
     await sut.submit();
     expect(sut.error, 'name taken');
   });
+
+  test('a phone number that is too short is refused before sending', () async {
+    fill(sut);
+    sut.setPhone('0812');
+    await sut.submit();
+    expect(sut.error, contains('8 to 15 digits'));
+    verifyNeverRegistered();
+  });
+
+  test(
+    'a phone number typed with spaces and dashes is sent as digits',
+    () async {
+      stubRegister(
+        const Ok<DriverSession>(
+          DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+        ),
+      );
+      fill(sut);
+      sut.setPhone('+62 812-3456-7890');
+      await sut.submit();
+
+      final String sent =
+          verify(
+                () => session.register(
+                  email: any(named: 'email'),
+                  name: any(named: 'name'),
+                  phone: captureAny(named: 'phone'),
+                  password: any(named: 'password'),
+                  vehiclePlate: any(named: 'vehiclePlate'),
+                  capacityKg: any(named: 'capacityKg'),
+                ),
+              ).captured.single
+              as String;
+      expect(sent, '+6281234567890');
+    },
+  );
+
+  test('a password longer than 72 bytes is refused before sending', () async {
+    fill(sut);
+    sut.setPassword('é' * 37);
+    await sut.submit();
+    expect(sut.error, contains('72 bytes'));
+    verifyNeverRegistered();
+  });
+
+  test('a capacity above 5000 kg is refused before sending', () async {
+    fill(sut);
+    sut.setCapacityKg('5001');
+    await sut.submit();
+    expect(sut.error, contains('Capacity'));
+    verifyNeverRegistered();
+  });
+
+  test('an empty capacity is not filled in for the courier', () async {
+    fill(sut);
+    sut.setCapacityKg('');
+    await sut.submit();
+    expect(sut.error, 'All fields are required');
+    verifyNeverRegistered();
+  });
+
+  test(
+    "identity's advice after the account was made is shown as it is",
+    () async {
+      const String advice =
+          'Your account exists, but the fleet could not be reached to file your '
+          'vehicle. Submit the same details again to finish.';
+      stubRegister(const Err<DriverSession>(ServiceUnavailableFailure(advice)));
+      fill(sut);
+      await sut.submit();
+      expect(sut.error, advice);
+    },
+  );
 }

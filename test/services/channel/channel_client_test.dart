@@ -43,89 +43,189 @@ void main() {
     refreshToken: 'refresh-tok',
   );
 
-  test('joins driver topic and connects on ok reply', () async {
-    final FakeSocket fake = FakeSocket()..completeReady();
-    final ChannelClient client = ChannelClient.withConnector((_) => fake);
+  late FakeSocket fake;
+  late ChannelClient client;
 
-    unawaited(client.connect(session, wsBase: 'ws://x'));
+  setUp(() {
+    fake = new FakeSocket()..completeReady();
+    client = new ChannelClient.withConnector(
+      (Uri uri, Iterable<String> protocols) => fake,
+    );
+  });
+
+  tearDown(() => client.dispose());
+
+  List<dynamic> lastFrame() => jsonDecode(fake.sent.last) as List<dynamic>;
+
+  void reply(
+    List<dynamic> frame,
+    String status, [
+    Map<String, dynamic> response = const <String, dynamic>{},
+  ]) {
+    fake.emit(
+      jsonEncode(<dynamic>[
+        frame[0],
+        frame[1],
+        frame[2],
+        'phx_reply',
+        <String, dynamic>{'status': status, 'response': response},
+      ]),
+    );
+  }
+
+  Future<List<dynamic>> joinFrame() async {
+    unawaited(client.connect(session, wsBase: 'wss://edge.test'));
     await pump();
 
-    final List<dynamic> join = jsonDecode(fake.sent.single) as List<dynamic>;
+    return jsonDecode(fake.sent.single) as List<dynamic>;
+  }
+
+  test('the socket is the gateway route, with the protocol version', () {
+    expect(
+      ChannelClient.socketUri('wss://edge.test').toString(),
+      'wss://edge.test/ws/v1/matching/driver?vsn=2.0.0',
+    );
+  });
+
+  test('the token is offered beside phoenix, unpadded standard base64', () {
+    final List<String> protocols = ChannelClient.protocolsFor('a.b.c');
+
+    expect(protocols, <String>['phoenix', 'base64url.bearer.phx.YS5iLmM']);
+  });
+
+  test('joins driver topic and connects on ok reply', () async {
+    final List<dynamic> join = await joinFrame();
     expect(join[2], 'driver:1');
     expect(join[3], 'phx_join');
 
-    fake.emit(
-      jsonEncode(<dynamic>[
-        join[0],
-        join[1],
-        'driver:1',
-        'phx_reply',
-        <String, dynamic>{'status': 'ok', 'response': <String, dynamic>{}},
-      ]),
+    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+    await pump();
+
+    expect(client.status, ConnectionStatus.connected);
+    expect(client.joinStatus, 'offline');
+  });
+
+  test('forbidden join emits refused, stays disconnected', () async {
+    bool refused = false;
+    client.refused.listen((_) => refused = true);
+
+    reply(await joinFrame(), 'error', <String, dynamic>{'reason': 'forbidden'});
+    await pump();
+
+    expect(refused, isTrue);
+    expect(client.status, ConnectionStatus.disconnected);
+  });
+
+  test(
+    'a join refused as pending approval says so, and does not reconnect',
+    () async {
+      bool notApproved = false;
+      bool refused = false;
+      client.notApproved.listen((_) => notApproved = true);
+      client.refused.listen((_) => refused = true);
+
+      reply(await joinFrame(), 'error', <String, dynamic>{
+        'reason': 'pending_approval',
+      });
+      await pump();
+
+      expect(notApproved, isTrue);
+      expect(refused, isFalse);
+      expect(client.status, ConnectionStatus.disconnected);
+    },
+  );
+
+  test('a join refused for a reason it does not know is retried', () async {
+    bool refused = false;
+    client.refused.listen((_) => refused = true);
+
+    reply(await joinFrame(), 'error', <String, dynamic>{'reason': 'busy_node'});
+    await pump();
+
+    expect(refused, isFalse);
+    expect(client.status, ConnectionStatus.reconnecting);
+  });
+
+  test('reply is correlated by ref', () async {
+    final List<dynamic> join = await joinFrame();
+    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+    await pump();
+
+    final Future<ChannelReply> replyFuture = client.setStatus('online');
+    await pump();
+    final List<dynamic> frame = lastFrame();
+    expect(frame[3], 'status');
+    reply(frame, 'ok', <String, dynamic>{'status': 'online'});
+
+    final ChannelReply answered = await replyFuture;
+    expect(answered.isOk, isTrue);
+    expect(answered.response['status'], 'online');
+  });
+
+  test('a push before the join is answered is not sent', () async {
+    await joinFrame();
+
+    await expectLater(
+      client.setStatus('online'),
+      throwsA(isA<ChannelException>()),
     );
+    expect(fake.sent, hasLength(1));
+  });
+
+  test('an unreadable frame is dropped, the socket stays up', () async {
+    final List<dynamic> join = await joinFrame();
+    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+    await pump();
+
+    fake.emit('not json');
     await pump();
 
     expect(client.status, ConnectionStatus.connected);
   });
 
-  test('forbidden join emits unauthorized, stays disconnected', () async {
-    final FakeSocket fake = FakeSocket()..completeReady();
-    final ChannelClient client = ChannelClient.withConnector((_) => fake);
-    bool unauth = false;
-    client.unauthorized.listen((_) => unauth = true);
+  test(
+    'positions kept offline go as one ping_batch with the ping fields',
+    () async {
+      final List<dynamic> join = await joinFrame();
+      reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+      await pump();
 
-    unawaited(client.connect(session, wsBase: 'ws://x'));
-    await pump();
-    final List<dynamic> join = jsonDecode(fake.sent.single) as List<dynamic>;
-    fake.emit(
-      jsonEncode(<dynamic>[
-        join[0],
-        join[1],
-        'driver:1',
-        'phx_reply',
-        <String, dynamic>{
-          'status': 'error',
-          'response': <String, dynamic>{'reason': 'forbidden'},
-        },
-      ]),
-    );
-    await pump();
+      unawaited(
+        client
+            .pingBatch(<TelemetryPing>[
+              new TelemetryPing(
+                latitude: -6.2,
+                longitude: 106.8,
+                recordedAt: DateTime.utc(2026, 10, 21, 8),
+                speedKmh: 30,
+              ),
+              new TelemetryPing(
+                latitude: -6.3,
+                longitude: 106.9,
+                recordedAt: DateTime.utc(2026, 10, 21, 8, 0, 4),
+              ),
+            ])
+            .then((_) {}, onError: (Object _) {}),
+      );
+      await pump();
 
-    expect(unauth, isTrue);
-    expect(client.status, ConnectionStatus.disconnected);
-  });
-
-  test('reply is correlated by ref', () async {
-    final FakeSocket fake = FakeSocket()..completeReady();
-    final ChannelClient client = ChannelClient.withConnector((_) => fake);
-    unawaited(client.connect(session, wsBase: 'ws://x'));
-    await pump();
-    final List<dynamic> join = jsonDecode(fake.sent.single) as List<dynamic>;
-    fake.emit(
-      jsonEncode(<dynamic>[
-        join[0],
-        join[1],
-        'driver:1',
-        'phx_reply',
-        <String, dynamic>{'status': 'ok', 'response': <String, dynamic>{}},
-      ]),
-    );
-    await pump();
-
-    final Future<ChannelReply> replyFuture = client.setStatus('online');
-    await pump();
-    final List<dynamic> frame = jsonDecode(fake.sent.last) as List<dynamic>;
-    expect(frame[3], 'status');
-    fake.emit(
-      jsonEncode(<dynamic>[
-        join[0],
-        frame[1],
-        'driver:1',
-        'phx_reply',
-        <String, dynamic>{'status': 'ok', 'response': <String, dynamic>{}},
-      ]),
-    );
-    final ChannelReply reply = await replyFuture;
-    expect(reply.isOk, isTrue);
-  });
+      final List<dynamic> frame = lastFrame();
+      expect(frame[3], 'ping_batch');
+      expect(frame[4], <String, dynamic>{
+        'pings': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'latitude': -6.2,
+            'longitude': 106.8,
+            'recorded_at': '2026-10-21T08:00:00.000Z',
+            'speed_kmh': 30.0,
+          },
+          <String, dynamic>{
+            'latitude': -6.3,
+            'longitude': 106.9,
+            'recorded_at': '2026-10-21T08:00:04.000Z',
+          },
+        ],
+      });
+    },
+  );
 }

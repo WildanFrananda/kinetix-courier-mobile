@@ -7,6 +7,7 @@ sealed class OrderUiState {
 
 class OrderShowing extends OrderUiState {
   const OrderShowing(this.order, {this.submitting = false, this.error});
+
   final Order order;
   final bool submitting;
   final Failure? error;
@@ -14,4 +15,8 @@ class OrderShowing extends OrderUiState {
 
 class OrderCancelled extends OrderUiState {
   const OrderCancelled();
+}
+
+class OrderUnassigned extends OrderUiState {
+  const OrderUnassigned();
 }

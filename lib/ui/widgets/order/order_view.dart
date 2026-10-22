@@ -8,6 +8,9 @@ class _OrderView extends StatelessWidget {
     required this.error,
   });
 
+  static const double _photoMaxSide = 1920;
+  static const int _photoQuality = 85;
+
   final OrderViewModel vm;
   final Order order;
   final bool submitting;
@@ -74,6 +77,10 @@ class _OrderView extends StatelessWidget {
                           final ImagePicker picker = ImagePicker();
                           final XFile? photo = await picker.pickImage(
                             source: ImageSource.camera,
+                            maxWidth: _photoMaxSide,
+                            maxHeight: _photoMaxSide,
+                            imageQuality: _photoQuality,
+                            requestFullMetadata: false,
                           );
 
                           if (photo != null) {
@@ -131,6 +138,7 @@ class _OrderView extends StatelessWidget {
                             );
                           },
                         );
+
                     if (signatureBytes != null && signatureBytes.isNotEmpty) {
                       final String base64Sig =
                           'data:image/png;base64,${base64Encode(signatureBytes)}';
@@ -141,6 +149,14 @@ class _OrderView extends StatelessWidget {
               ),
             ],
           ),
+          if (vm.podPhotoUrl == null || vm.podSignature == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                "A photo of the parcel and the receiver's signature are both "
+                'required.',
+              ),
+            ),
         ],
         if (error != null)
           Padding(

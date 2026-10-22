@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: bin/build <production|lab> <apk|appbundle|ipa> [more flutter build arguments]" >&2
+  exit 64
+}
+
+[[ $# -ge 2 ]] || usage
+
+environment=$1
+target=$2
+shift 2
+
+case $target in
+  apk | appbundle | ipa) ;;
+  *) usage ;;
+esac
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+defines="$root/dart_defines/$environment.json"
+
+if [[ ! -f $defines ]]; then
+  echo "no dart defines for '$environment': $defines does not exist" >&2
+  exit 64
+fi
+
+cd "$root"
+exec fvm flutter build "$target" --release --dart-define-from-file="$defines" "$@"

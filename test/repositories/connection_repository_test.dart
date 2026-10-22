@@ -4,9 +4,10 @@ import 'package:fake_async/fake_async.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository_impl.dart';
+import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
 import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -14,10 +15,14 @@ class _MockChannel extends Mock implements ChannelClient {}
 
 class _MockRenewer extends Mock implements SessionRenewer {}
 
+class _MockFleet extends Mock implements FleetStanding {}
+
 void main() {
   late _MockChannel channel;
   late _MockRenewer renewer;
+  late _MockFleet fleet;
   late StreamController<void> refusals;
+  late StreamController<void> notApproved;
   late StreamController<ConnectionStatus> statuses;
   late ConnectionRepositoryImpl sut;
 
@@ -31,21 +36,15 @@ void main() {
     token: 'access-2',
     refreshToken: 'refresh-2',
   );
-
-  final TelemetryPing ping = new TelemetryPing(
-    latitude: 1,
-    longitude: 2,
-    recordedAt: DateTime.utc(2026),
+  const DriverProfile approved = DriverProfile(
+    id: DriverId(1),
+    vehiclePlate: 'B 1 ABC',
+    capacityKg: 100,
+    status: 'offline',
+    active: true,
   );
 
   setUpAll(() {
-    registerFallbackValue(
-      new TelemetryPing(
-        latitude: 0,
-        longitude: 0,
-        recordedAt: DateTime.utc(2026),
-      ),
-    );
     registerFallbackValue(
       const DriverSession(
         driverId: DriverId(0),
@@ -57,15 +56,18 @@ void main() {
 
   void build() {
     refusals = new StreamController<void>.broadcast();
+    notApproved = new StreamController<void>.broadcast();
     statuses = new StreamController<ConnectionStatus>.broadcast();
-    when(() => channel.unauthorized).thenAnswer((_) => refusals.stream);
+    when(() => channel.refused).thenAnswer((_) => refusals.stream);
+    when(() => channel.notApproved).thenAnswer((_) => notApproved.stream);
     when(() => channel.statusStream).thenAnswer((_) => statuses.stream);
-    sut = new ConnectionRepositoryImpl(channel, renewer);
+    sut = new ConnectionRepositoryImpl(channel, renewer, fleet);
   }
 
   setUp(() {
     channel = new _MockChannel();
     renewer = new _MockRenewer();
+    fleet = new _MockFleet();
     when(
       () => channel.connect(any(), wsBase: any(named: 'wsBase')),
     ).thenAnswer((_) async {});
@@ -75,6 +77,7 @@ void main() {
   tearDown(() {
     unawaited(sut.dispose());
     unawaited(refusals.close());
+    unawaited(notApproved.close());
     unawaited(statuses.close());
   });
 
@@ -82,39 +85,9 @@ void main() {
     when(() => renewer.renew()).thenAnswer((_) async => result);
   }
 
-  test('sendPing ok maps to Ok', () async {
-    build();
-    when(
-      () => channel.ping(any()),
-    ).thenAnswer((_) async => const ChannelReply('ok', <String, dynamic>{}));
-    expect(await sut.sendPing(ping), isA<Ok<Unit>>());
-  });
-
-  test('sendPing error reason maps to ChannelFailure', () async {
-    build();
-    when(() => channel.ping(any())).thenAnswer(
-      (_) async => const ChannelReply('error', <String, dynamic>{
-        'reason': 'invalid_telemetry',
-      }),
-    );
-    final res = await sut.sendPing(ping);
-    expect((res as Err<Unit>).failure, isA<ChannelFailure>());
-  });
-
-  test('sendPing ChannelException maps to NetworkFailure', () async {
-    build();
-    when(() => channel.ping(any())).thenThrow(const ChannelException('x'));
-    final res = await sut.sendPing(ping);
-    expect((res as Err<Unit>).failure, isA<NetworkFailure>());
-  });
-
-  test('setStatus ok maps to Ok', () async {
-    build();
-    when(
-      () => channel.setStatus(any()),
-    ).thenAnswer((_) async => const ChannelReply('ok', <String, dynamic>{}));
-    expect(await sut.setStatus('online'), isA<Ok<Unit>>());
-  });
+  void standsAs(Result<DriverProfile> result) {
+    when(() => fleet.check(any())).thenAnswer((_) async => result);
+  }
 
   test('statusStream passes through the channel', () async {
     build();
@@ -128,8 +101,8 @@ void main() {
       fakeAsync((FakeAsync async) {
         build();
         renewsTo(const Ok<DriverSession>(renewed));
-        bool expired = false;
-        sut.sessionExpired.listen((_) => expired = true);
+        final List<SessionEnd> ended = <SessionEnd>[];
+        sut.sessionEnded.listen(ended.add);
 
         unawaited(sut.connect(signedIn));
         refusals.add(null);
@@ -138,7 +111,7 @@ void main() {
         verify(
           () => channel.connect(renewed, wsBase: any(named: 'wsBase')),
         ).called(1);
-        expect(expired, isFalse);
+        expect(ended, isEmpty);
       });
     });
 
@@ -146,14 +119,14 @@ void main() {
       fakeAsync((FakeAsync async) {
         build();
         renewsTo(const Err<DriverSession>(AuthFailure()));
-        bool expired = false;
-        sut.sessionExpired.listen((_) => expired = true);
+        final List<SessionEnd> ended = <SessionEnd>[];
+        sut.sessionEnded.listen(ended.add);
 
         unawaited(sut.connect(signedIn));
         refusals.add(null);
         async.flushMicrotasks();
 
-        expect(expired, isTrue);
+        expect(ended.single, isA<SessionSignedOut>());
         verifyNever(
           () => channel.connect(renewed, wsBase: any(named: 'wsBase')),
         );
@@ -164,8 +137,8 @@ void main() {
       fakeAsync((FakeAsync async) {
         build();
         renewsTo(const Err<DriverSession>(NetworkFailure()));
-        bool expired = false;
-        sut.sessionExpired.listen((_) => expired = true);
+        final List<SessionEnd> ended = <SessionEnd>[];
+        sut.sessionEnded.listen(ended.add);
 
         unawaited(sut.connect(signedIn));
         refusals.add(null);
@@ -179,7 +152,7 @@ void main() {
         verify(
           () => channel.connect(renewed, wsBase: any(named: 'wsBase')),
         ).called(1);
-        expect(expired, isFalse);
+        expect(ended, isEmpty);
       });
     });
 
@@ -209,13 +182,14 @@ void main() {
     });
 
     test(
-      'again, right after a renewal, is a real refusal: the courier is signed out',
+      'again right after a renewal asks the fleet why, and a pending courier is sent to wait for approval',
       () {
         fakeAsync((FakeAsync async) {
           build();
           renewsTo(const Ok<DriverSession>(renewed));
-          bool expired = false;
-          sut.sessionExpired.listen((_) => expired = true);
+          standsAs(const Err<DriverProfile>(PendingApprovalFailure()));
+          final List<SessionEnd> ended = <SessionEnd>[];
+          sut.sessionEnded.listen(ended.add);
 
           unawaited(sut.connect(signedIn));
           refusals.add(null);
@@ -223,7 +197,85 @@ void main() {
           refusals.add(null);
           async.flushMicrotasks();
 
-          expect(expired, isTrue);
+          expect(ended.single, isA<SessionNotApproved>());
+          verify(() => renewer.renew()).called(1);
+          verify(() => fleet.check('access-2')).called(1);
+        });
+      },
+    );
+
+    for (final Failure refusal in <Failure>[
+      const AuthFailure(),
+      const RegistrationIncompleteFailure(),
+    ]) {
+      test(
+        'again right after a renewal, with the fleet answering ${refusal.runtimeType}, signs the courier out',
+        () {
+          fakeAsync((FakeAsync async) {
+            build();
+            renewsTo(const Ok<DriverSession>(renewed));
+            standsAs(new Err<DriverProfile>(refusal));
+            final List<SessionEnd> ended = <SessionEnd>[];
+            sut.sessionEnded.listen(ended.add);
+
+            unawaited(sut.connect(signedIn));
+            refusals.add(null);
+            async.flushMicrotasks();
+            refusals.add(null);
+            async.flushMicrotasks();
+
+            expect(ended.single, isA<SessionSignedOut>());
+          });
+        },
+      );
+    }
+
+    test(
+      'again right after a renewal, while the fleet cannot be asked, is retried and nobody is signed out',
+      () {
+        fakeAsync((FakeAsync async) {
+          build();
+          renewsTo(const Ok<DriverSession>(renewed));
+          standsAs(const Err<DriverProfile>(NetworkFailure()));
+          final List<SessionEnd> ended = <SessionEnd>[];
+          sut.sessionEnded.listen(ended.add);
+
+          unawaited(sut.connect(signedIn));
+          refusals.add(null);
+          async.flushMicrotasks();
+          refusals.add(null);
+          async.flushMicrotasks();
+          clearInteractions(channel);
+
+          async.elapse(const Duration(seconds: 1));
+
+          verify(
+            () => channel.connect(renewed, wsBase: any(named: 'wsBase')),
+          ).called(1);
+          expect(ended, isEmpty);
+        });
+      },
+    );
+
+    test(
+      'again right after a renewal, with the fleet saying the courier may drive, is retried',
+      () {
+        fakeAsync((FakeAsync async) {
+          build();
+          renewsTo(const Ok<DriverSession>(renewed));
+          standsAs(const Ok<DriverProfile>(approved));
+          final List<SessionEnd> ended = <SessionEnd>[];
+          sut.sessionEnded.listen(ended.add);
+
+          unawaited(sut.connect(signedIn));
+          refusals.add(null);
+          async.flushMicrotasks();
+          refusals.add(null);
+          async
+            ..flushMicrotasks()
+            ..elapse(const Duration(seconds: 1));
+
+          expect(ended, isEmpty);
           verify(() => renewer.renew()).called(1);
         });
       },
@@ -233,8 +285,8 @@ void main() {
       fakeAsync((FakeAsync async) {
         build();
         renewsTo(const Ok<DriverSession>(renewed));
-        bool expired = false;
-        sut.sessionExpired.listen((_) => expired = true);
+        final List<SessionEnd> ended = <SessionEnd>[];
+        sut.sessionEnded.listen(ended.add);
 
         unawaited(sut.connect(signedIn));
         refusals.add(null);
@@ -244,7 +296,7 @@ void main() {
         refusals.add(null);
         async.flushMicrotasks();
 
-        expect(expired, isFalse);
+        expect(ended, isEmpty);
         verify(() => renewer.renew()).called(2);
       });
     });
@@ -289,6 +341,24 @@ void main() {
     });
   });
 
+  test(
+    'a join refused as pending approval sends the courier to wait, without renewing',
+    () {
+      fakeAsync((FakeAsync async) {
+        build();
+        final List<SessionEnd> ended = <SessionEnd>[];
+        sut.sessionEnded.listen(ended.add);
+
+        unawaited(sut.connect(signedIn));
+        notApproved.add(null);
+        async.flushMicrotasks();
+
+        expect(ended.single, isA<SessionNotApproved>());
+        verifyNever(() => renewer.renew());
+      });
+    },
+  );
+
   test('onResume triggers reconnectNow', () {
     build();
     sut.onResume();
@@ -297,9 +367,6 @@ void main() {
 
   test('connect delegates to the channel with a wsBase', () async {
     build();
-    when(
-      () => channel.connect(any(), wsBase: any(named: 'wsBase')),
-    ).thenAnswer((_) async {});
     await sut.connect(
       const DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
     );

@@ -1,3 +1,4 @@
+import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:fleet_pulse_mobile/models/order.dart';
 
 sealed class ServerEvent {
@@ -19,5 +20,11 @@ class OrderAssignedEvent extends ServerEvent {
 class OrderUpdatedEvent extends ServerEvent {
   const OrderUpdatedEvent(this.order);
 
-  final Order order;
+  final Order? order;
+}
+
+class OrderUnassignedEvent extends ServerEvent {
+  const OrderUnassignedEvent(this.id);
+
+  final OrderId id;
 }

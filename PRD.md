@@ -1,38 +1,27 @@
 # Product Requirement Document (PRD): FleetPulse Driver App
 
-**The driver-facing mobile client for the FleetPulse tracking & dispatch engine.**
+**The courier-facing mobile client of the Kinetix fleet (`kinetix-matching-service`), signed in by
+`kinetix-identity-service`, reached only through the edge (`kinetix-api-gateway`).**
 
 ---
 
 ## 1. Executive Summary
 
-FleetPulse Driver is the native mobile companion to the FleetPulse backend. It
-turns a courier's phone into a live telemetry source and an order terminal: it
-streams GPS to the server over a persistent WebSocket, receives dispatched
-orders in real time, and lets the driver advance an order through pickup and
-delivery — all while surviving the flaky connectivity of real-world driving.
+FleetPulse Driver turns a courier's phone into a live position source and a job terminal: it streams GPS to
+matching over a persistent WebSocket, receives dispatched jobs in real time, and lets the courier carry a job
+through pickup and a proved delivery, while surviving the flaky connectivity of real-world driving.
 
-The backend (Elixir/Phoenix) already exists and holds all business logic. This
-app is a **thin, resilient client** over the backend's driver channel. It owns
-no domain rules; it owns connectivity, location, battery discipline, and a
-clean driver UX.
+The services hold every business rule. This app is a **thin, resilient client**: it owns connectivity, location,
+battery discipline and a clean courier UX, and decides nothing the services decide.
 
 ---
 
 ## 2. Problem Statement
 
-The FleetPulse backend can track thousands of drivers and dispatch orders in
-milliseconds — but today it has **no real driver client**. All telemetry has
-been simulated by tests and RPC. Without a phone app:
-
-- No real GPS ever reaches the system.
-- Dispatched orders cannot be delivered to a human.
-- The channel contract (auth, reconnection, ping cadence, order lifecycle) has
-  never been exercised by a real device on a real network.
-
-A driver on the road needs an app that: stays connected through tunnels and
-cell handovers, reports location without draining the battery, and shows the
-current order with unambiguous pickup/deliver actions.
+A courier on the road needs an app that stays connected through tunnels and cell handovers, reports its position
+without draining the battery, and shows the current job with unambiguous pickup and deliver actions. Dispatch
+needs every courier's position to be fresh, and every delivery to carry evidence: a photo of the parcel and the
+receiver's signature.
 
 ---
 
@@ -40,340 +29,254 @@ current order with unambiguous pickup/deliver actions.
 
 ### Goals (V1)
 
-- Authenticate a driver and hold a session token securely.
-- Maintain a live WebSocket to the backend driver channel, with automatic reconnection.
-- Stream GPS position every 3–5 seconds while on duty, including with the screen off.
-- Receive dispatched orders instantly and display pickup/dropoff.
-- Let the driver mark an order **picked up** and **delivered**.
-- Let the driver toggle availability (online / offline).
+- Register a courier and its vehicle in the app; the account waits for an administrator's approval.
+- Sign in with email and password, and a TOTP code when the account has a second factor.
+- Hold the session securely and renew it without asking the courier to sign in again.
+- Keep a live WebSocket to matching's driver channel, with automatic reconnection.
+- Let the courier go on and off duty; while on duty, stream the position every few seconds, including with the
+  screen off.
+- Receive dispatched jobs at once; show pickup and drop-off.
+- Mark a job **picked up**, then **delivered** with a photo and a signature.
 - Degrade gracefully offline and recover cleanly on reconnect.
 
 ### Non-Goals (V1)
 
-- Turn-by-turn navigation (hand off to the phone's map app via a deep link).
-- In-app chat, ratings, earnings, or payments.
-- The dispatcher experience (that is the existing Phoenix LiveView web dashboard).
-
-> **Driver self-registration IS in V1.** A driver signs up in-app via
-> `POST /driver/register`; the account starts inactive and only works once an
-> admin approves it from the dispatch dashboard. See 5.1 and 7.1.
+- Turn-by-turn navigation (the phone's map app opens through a deep link).
+- Chat, ratings, earnings or payments in the app.
+- Enabling or disabling the second factor (done elsewhere; the app honours it).
+- The dispatcher's tools (matching's backoffice API).
 
 ---
 
 ## 4. Target User
 
-A **courier / driver** operating a vehicle, using their own Android or iOS phone,
-often with one hand, in bright sunlight, on intermittent mobile data. Primary
-needs: know if they're connected, know their next order, and complete it in as
-few taps as possible.
+A **courier** driving a vehicle, using their own Android or iOS phone, often with one hand, in bright sunlight, on
+intermittent mobile data. Primary needs: know whether they are connected and on duty, know their next job, and
+complete it in as few taps as possible.
 
 ---
 
-## 5. Backend Contract (source of truth)
+## 5. Service Contract (source of truth)
 
-This app is a client of the existing FleetPulse backend. The contract below is
-what the backend already implements; the app must speak it exactly.
+The app speaks these contracts exactly. Every request goes to the edge (`HTTP_BASE`, `WS_BASE`), TLS only.
 
-### 5.1 Registration, login & token issuance (REST) — **live**
-
-A driver **registers** in-app, then **logs in** once an admin approves them.
+### 5.1 Registration — identity
 
 ```
-POST /driver/register         Content-Type: application/json
-  request:  { "name": "...", "phone": "...", "vehicle_plate": "...",
-              "capacity_kg": 200, "password": "..." }
-  201:      { "message": "Registration successful. Your account is pending admin approval.",
-              "driver_id": 1 }
-  422:      { "errors": { "<field>": ["<message>", ...] } }
+POST /api/v1/couriers/register
+  request: { "email", "password", "fullName", "phoneNumber", "vehiclePlate", "capacityKg" }
+  201:     { "accessToken", "refreshToken", "expiresIn", "tokenType", "user": {…}, "driverId" }
 ```
 
-The new account starts **inactive** (`active: false`); it cannot log in until
-an admin approves it from the dispatch dashboard.
+- `password` is 12 characters or more and at most 72 bytes; `phoneNumber` matches `^\+?[0-9]{8,15}$`;
+  `fullName` 2–120 characters; `vehiclePlate` at most 20; `capacityKg` 1–5000. The app checks these first and
+  shows identity's own messages for anything it refuses (`400`, a list of messages for validation).
+- A `400` or `503` **after the account was created** carries `accountExists: true` and asks the courier to submit
+  again with the same email and password; the app shows that text as it is. `409` means the email belongs to an
+  account that cannot be resumed here.
+- The account is pending until an administrator approves it. The app keeps the session and shows the waiting
+  screen.
+
+### 5.2 Sign-in, second factor, renewal, sign-out — identity
 
 ```
-POST /driver/session          Content-Type: application/json
-  request:  { "phone": "...", "password": "..." }
-  201:      { "token": "...", "driver_id": 1, "expires_in": 604800 }
-  403:      { "error": "pending_approval" }        # correct password, not yet approved
-  401:      { "error": "invalid_credentials" }
-  400:      { "error": "phone and password are required" }
+POST /api/v1/auth/login          { "email", "password" }
+  200: { "accessToken", "refreshToken", "expiresIn", "tokenType", "user" }
+  200: { "mfaRequired": true, "challengeToken", "expiresIn" }        (the account has a second factor)
+  401: wrong email or password      400: invalid input      429: too many attempts
+
+POST /api/v1/auth/2fa/verify     { "challengeToken", "code" }          (code: six digits)
+  200: the session, as login        401: wrong code, or a challenge already answered or expired
+
+POST /api/v1/auth/refresh        { "refreshToken" }                    (rotates the pair)
+POST /api/v1/auth/logout         { "refreshToken" }, Authorization: Bearer <access token>     204
 ```
 
-- The token is a `Phoenix.Token`-signed value carrying the `driver_id`
-  (`expires_in` = 604800 s = 7 days). Store it in secure storage.
-- **`403 pending_approval`** means the credentials are correct but the account
-  is still awaiting approval — the app should show a "waiting for approval"
-  screen, not a credentials error.
-- A wrong password and an unknown phone both return the **same** `401
-  invalid_credentials` — no account enumeration by response or timing.
-- There is no refresh token: when a token is rejected as expired, re-login.
+- The access token lives 15 minutes, the refresh token 30 days. Identity treats a refresh token presented twice as
+  stolen, so the app renews one request at a time and stores the new pair in one write before using it.
+- A challenge answers once; a wrong code does not spend it. After 300 s the courier signs in again.
+- Enabling or disabling a second factor ends every other session; the courier's next renewal is refused and the
+  app signs out.
+- Sign-out ends the refresh family at identity before the phone forgets the session. If identity cannot be
+  reached, the phone forgets it anyway.
 
-### 5.2 Socket & join
+### 5.3 May this account drive — matching
 
-- Endpoint: `ws://<host>/driver/websocket?token=<TOKEN>` (WSS in production).
-- After connecting, the app joins the topic **`driver:<driver_id>`**, which must
-  match the id inside the token, or the join is refused (`forbidden`).
-- Joining starts server-side tracking and sets availability: **`busy` if the
-  driver already holds an active order, otherwise `online`.** A reconnect
-  mid-delivery is never reset to available.
-- Immediately after a successful join the server pushes **exactly one**
-  `active_order` event (see 5.4), so the app can restore any in-flight order
-  without waiting for a fresh assignment.
+```
+GET /api/v1/matching/driver/me   Authorization: Bearer <access token>
+  200: { "data": { "id", "vehicle_plate", "capacity_kg", "status", "active" } }
+  403: { "error": "pending_approval" }      404: { "error": "no_driver_record" }
+  401: the token is refused                 503: identity could not be asked
+```
 
-### 5.3 Messages the app SENDS (channel `push`)
+Asked after sign-in, at start-up, and when the socket is refused twice. `pending_approval` (a courier never
+approved, or deactivated) shows the waiting screen; `404` sends the courier to finish registering.
+
+### 5.4 Socket & join — matching
+
+- `wss://<edge>/ws/v1/matching/driver?vsn=2.0.0`. The access token travels in `Sec-WebSocket-Protocol`:
+  `phoenix, base64url.bearer.phx.<the token in standard base64, without padding>`. It is never in the URL.
+- Matching refuses at the upgrade: `403` with no body (bad or expired token, not a courier, no vehicle, pending
+  or deactivated), `503` when identity could not be asked. The app renews once on a refusal; a second refusal
+  asks 5.3 why. `503` and an unreachable edge are retried with backoff.
+- After connecting, the app joins `driver:<driver_id>`; the reply is `{ "status": "online" | "busy" | "offline" }`.
+  **Joining puts nobody on duty.** A join refused with `pending_approval` shows the waiting screen.
+- Right after the join, matching pushes one `active_order` (5.6).
+- A disconnect takes the courier off duty.
+
+### 5.5 Messages the app SENDS (channel `push`)
 
 | Event | Payload | Success reply | Error replies (`{reason}`) |
 | :--- | :--- | :--- | :--- |
-| `ping` | `latitude`, `longitude`, `recorded_at` (ISO8601), optional `speed_kmh`, `bearing_deg` | `ok` | `invalid_telemetry`, `not_found` |
-| `status` | `status`: `"online"` \| `"busy"` \| `"offline"` | `ok` | `invalid_status` |
-| `pickup` | `order_id` | `ok` | `forbidden`, `invalid_transition`, `not_found` |
-| `delivered` | `order_id` | `ok` | `forbidden`, `invalid_transition`, `not_found` |
+| `status` | `status`: `"online"` \| `"busy"` \| `"offline"` | `{status}`: what matching decided | `invalid_status`, `no_active_job` |
+| `ping` | `latitude`, `longitude`, `recorded_at` (ISO 8601, the fix's own time), optional `speed_kmh`, `bearing_deg` | `ok` | `invalid_telemetry`, `rate_limited` |
+| `ping_batch` | `pings`: up to 100 positions recorded offline, each with the `ping` fields, any order | `{stored, duplicates, refused: [{index, reason}]}` by index | `rate_limited`, `invalid_batch`, `batch_too_large`, `unavailable` |
+| `pickup` | `order_id` | `ok` | `forbidden`, `invalid_transition`, `not_found`, `invalid_order_id` |
+| `pod_upload` | `order_id`, `photo_sha256` | `{upload_url, upload_headers, photo_url}` | `invalid_photo_hash`, `invalid_transition`, … |
+| `delivered` | `order_id`, `pod_photo_url`, `pod_signature` (`data:image/png;base64,…`) | `ok` | `signature_required`, `invalid_proof`, `proof_unverifiable`, `invalid_transition`, … |
 
-Validation enforced server-side: latitude −90..90, longitude −180..180,
-`speed_kmh` ≥ 0, `bearing_deg` 0..<360, `recorded_at` must be parseable ISO8601.
-Invalid pings are rejected as a reply, not a disconnect — the app should surface
-and drop them, never crash.
+- `status online` answers `busy` while the courier carries a job. While on duty the app sends `status online`
+  after every join, then **one `ping` at once**, moved or not: matching dispatches only on a position received
+  after the courier went on duty.
+- A `ping` older than the position matching holds is ignored; one stamped more than five minutes ahead is
+  `invalid_telemetry`; more than 100 in 10 s is `rate_limited`.
+- `ping_batch` positions are history: matching stores them and never makes them the live position. One more than
+  a day old is refused as `too_old`, one more than five minutes ahead as `ahead_of_server_clock`. An `ok` reply
+  settles the whole batch; an error reply settles nothing. Batches have their own budget, 30 per 60 s.
+- `order_id` must be a positive integer (`invalid_order_id` otherwise).
+- A `pickup` or `delivered` repeated by the courier who made it answers `ok`, so a retry after a lost reply is
+  success. `proof_unverifiable` means the bucket could not be asked: try again.
+- The photo is PUT to `upload_url` with exactly `upload_headers`; it must be a JPEG whose SHA-256 is
+  `photo_sha256`.
 
-### 5.4 Messages the app RECEIVES (channel push from server)
+### 5.6 Messages the app RECEIVES
 
 | Event | Payload | When |
 | :--- | :--- | :--- |
-| `active_order` | `{ "order": <order fields> \| null }` | once, right after join |
-| `order_assigned` | `id`, `status`, `weight_kg`, `pickup {latitude, longitude}`, `dropoff {latitude, longitude}`, `assigned_at` | on a fresh dispatch |
-| `order_updated` | same order shape | on any lifecycle change from the server side (e.g. a dispatcher cancellation) |
+| `active_order` | `{ "order": <order> \| null }` | right after the join, and after an `order_unassigned` |
+| `order_assigned` | `<order>` | a fresh dispatch |
+| `order_updated` | `<order>` | a change made on the server side (a cancellation, say) |
+| `order_unassigned` | `{ "id" }` | an administrator took the job off the courier |
 
-The `order` object (in all three) has: `id`, `status`
-(`assigned`/`picked_up`/`delivered`/`cancelled`), `weight_kg`,
-`pickup {latitude, longitude}`, `dropoff {latitude, longitude}`, `assigned_at`.
-On join the app should treat `active_order` as the source of truth: a non-null
-order means restore that job (and expect `busy`); `null` means the driver is
-free.
+`<order>` is `id`, `status` (`assigned`/`picked_up`/`delivered`/`cancelled`), `weight_kg`,
+`pickup {latitude, longitude}`, `dropoff {latitude, longitude}`, `assigned_at`. A job is never parsed without
+`assigned_at`; a `pending` job is not the courier's.
 
-### 5.5 Phoenix Channel wire protocol
+### 5.7 Phoenix channel wire protocol
 
-The backend speaks the Phoenix Channel protocol over the raw socket. Using
-`web_socket_channel`, the app must implement the framing itself:
-
-- Join with a `phx_join` frame on `driver:<id>`; expect a `phx_reply` with `status: "ok"`.
-- Every message is `[join_ref, ref, topic, event, payload]` (v2 serializer).
-- Send a **heartbeat** (`phoenix` topic, `heartbeat` event) roughly every 30 s or the server closes the socket.
-- Correlate replies by `ref`.
-
-> **Decision point:** implement this thin protocol layer over
-> `web_socket_channel` (full control, already in `pubspec`), or adopt a
-> `phoenix`-protocol Dart package. This PRD assumes a small in-house
-> `ChannelClient` over `web_socket_channel`.
-
-### 5.6 Disconnect semantics
-
-On socket loss the backend marks the driver `offline` but **keeps their process
-warm** — a reconnect within minutes preserves the last known position. The app
-should reconnect aggressively and re-join the same topic.
+Every frame is `[join_ref, ref, topic, event, payload]` (serializer 2.0.0). Replies are `phx_reply`, correlated
+by `ref`. A heartbeat (`phoenix` topic, `heartbeat` event) goes every 30 s. The app's `ChannelClient` implements
+this over `web_socket_channel`'s `IOWebSocketChannel`.
 
 ---
 
-## 6. Backend Dependencies — status
+## 6. Behaviour
 
-Building this app surfaced two gaps in the backend; both are now **closed**.
-This is the intended loop: mobile reveals the gap, the backend fills it, this
-document is re-locked.
+### 6.1 Session
 
-1. **Driver registration, login & token issuance — ✅ DONE.** `POST /driver/register`
-   creates an inactive account; `POST /driver/session` returns a signed
-   `DriverToken` once the account is admin-approved (see 5.1). Approval is done
-   by an admin from the dispatch dashboard.
-2. **Active order on (re)connect — ✅ DONE.** The channel pushes one
-   `active_order` event right after join (see 5.2/5.4), and sets the driver
-   `busy` rather than `online` when an order is in flight, so a reconnecting
-   driver never loses their job or gets double-assigned.
-3. **Token expiry handling — app-side, open.** Tokens last 7 days
-   (`expires_in`); there is no refresh token by design. The app must detect an
-   `expired`/`invalid` token (socket-connect refusal or a `401` from
-   `/driver/session`) and route back to login.
+- Splash renews an expired access token, then asks 5.3: approved → tracking; pending → waiting screen; refused →
+  sign-in. When matching cannot be asked, tracking opens and keeps trying.
+- A refused socket is renewed once; a second refusal asks 5.3, and the answer decides between the waiting screen
+  and sign-in. The courier is never signed out because a service could not be reached.
 
-For local development a token can also be minted manually with
-`FleetPulseWeb.DriverToken.sign(driver_id)` in an `iex -S mix` session and pasted
-into a dev-only config screen — useful before real credentials are seeded.
+### 6.2 Connectivity
 
----
+- One connection indicator: connected / connecting / reconnecting / offline.
+- Backoff reconnect (1, 2, 4 … 30 s, with jitter), and at once when the app returns to the foreground.
+- `pickup` and `delivered` are retried until answered.
+- A position that cannot go live (no socket, not yet back on duty, a `ping` that failed) is kept in Hive and sent
+  later with `ping_batch`, never as a live `ping`: oldest first, 100 at a time, one batch in flight, after the join,
+  `status online` and the fresh live fix. A batch is deleted only when an `ok` reply settles it; an error reply keeps
+  it for a retry with backoff (60 s after `rate_limited`). Positions older than a day are dropped on the phone. The
+  queue holds at most 21,600 positions (a day at the four-second cadence), the oldest dropped first.
 
-## 7. Core Features
+### 6.3 Position
 
-### 7.1 Registration, authentication & session
+- Location permission in the foreground and "always".
+- While on duty, a `ping` every 4 s when the courier has moved 5 m or more since the last one sent.
+- Android keeps streaming through geolocator's location foreground service, with its notification, while on
+  duty; iOS through the `location` background mode.
+- `rate_limited` pauses pings for 10 s; `invalid_telemetry` is shown (the phone's clock) and that fix is not sent
+  again.
 
-- Driver registers (name, phone, vehicle plate, capacity, password) via
-  `POST /driver/register`; the app then shows a "pending approval" state.
-- Driver logs in (phone + password → driver token). Token stored in secure storage.
-- `403 pending_approval` on login routes to the "waiting for approval" screen.
-- Auto-login on launch if a valid token exists; route straight to tracking.
-- On `expired`/`invalid` token, clear session and return to login.
+### 6.4 Duty
 
-### 7.2 Connectivity
+- A switch puts the courier on or off duty. The screen shows the availability matching decided (`busy` while
+  carrying a job).
 
-- Connect and join on going on-duty; show a clear connection indicator
-  (connected / connecting / reconnecting / offline).
-- Exponential-backoff reconnect with heartbeat keep-alive.
-- Queue nothing critical on the client: the backend samples position, so a
-  dropped ping is acceptable; a dropped **lifecycle action** (pickup/delivered)
-  must be retried until acknowledged.
+### 6.5 Jobs
 
-### 7.3 Live location streaming
-
-- Acquire location permission (foreground **and** background/"always").
-- Emit a ping every 3–5 s while on duty, throttled to avoid redundant sends.
-- Continue while the screen is off / app backgrounded (foreground service on
-  Android, background location mode on iOS).
-- Stamp each ping with the device clock as `recorded_at` (ISO8601, UTC).
-
-### 7.4 Availability status
-
-- Toggle **online ⇄ offline**. Going offline stops streaming and informs the
-  server. `busy` is set by the server on assignment, reflected read-only in the UI.
-
-### 7.5 Order handling
-
-- Receive `order_assigned` → show an order card (pickup & dropoff, weight).
-- One-tap **"Picked up"** (enabled when assigned) → `pickup`.
-- One-tap **"Delivered"** (enabled when picked up) → `delivered`; on success the
-  driver returns to available.
-- Receive `order_updated` (e.g. cancellation) → update or dismiss the card.
-- "Navigate" opens pickup/dropoff in the phone's map app (deep link).
+- `order_assigned` or a non-null `active_order` opens the job: pickup, drop-off, weight, and "navigate" deep links.
+- "Mark as Picked Up" while assigned; then the proof: a camera photo (at most 1920 px a side, JPEG quality 85) and
+  the receiver's signature drawn on screen; "Mark as Delivered" only when both exist.
+- `order_updated` cancelled shows "Order cancelled"; `order_unassigned` shows that dispatch took the job off the
+  courier.
 
 ---
 
-## 8. Screens (map to sealed `AppRoute`s)
-
-Per the project's Navigator 2.0 + sealed-class routing convention:
+## 7. Screens (sealed `AppRoute`s)
 
 | Route | Screen | Purpose |
 | :--- | :--- | :--- |
-| `SplashRoute` | Splash | Bootstrap DI, check token, decide next route |
-| `LoginRoute` | Login | Driver credentials → token (dev: manual token entry) |
-| `TrackingRoute` | Tracking (home) | Connection state, online toggle, live position, GPS running |
-| `OrderRoute(order)` | Active order | Pickup/dropoff detail, pickup/deliver actions, navigate |
-
-Each route is a subclass of `sealed class AppRoute`; screens are `StatelessWidget`
-reading a ViewModel via `context.watch`; navigation intent flows through
-`AppRouterState` — never `Navigator.pushNamed` or `BuildContext` in a ViewModel.
+| `SplashRoute` | Splash | Renew the session, ask the fleet, choose the next route |
+| `LoginRoute` | Login | Email and password, then the code when a second factor is required |
+| `RegisterRoute` | Register | Person, vehicle and password |
+| `PendingApprovalRoute` | Waiting | The account is not approved (yet); back to sign-in signs out |
+| `TrackingRoute` | Tracking (home) | Connection, duty switch, availability, last position |
+| `OrderRoute(order)` | Job | Pickup and drop-off, the proof, pickup and deliver actions |
 
 ---
 
-## 9. Technical Architecture
+## 8. Technical Architecture
 
-Follows `CLAUDE.md` (Enterprise Flutter, MVVM, strict type-safety).
+`CLAUDE.md` binds: MVVM, Navigator 2.0 over a sealed `AppRoute`, `get_it` + `injectable`, `freezed` models,
+`Result`/`Failure`, repositories over services, no UseCase layer.
 
-### 9.1 Layers
+| Layer | Pieces |
+| :--- | :--- |
+| Services | `DriverApi` (Retrofit over Dio), `TokenStore` (secure storage, one record), `SessionRenewer`, `FleetStanding`, `ChannelClient` + `WsChannelSocket`, `LocationService`, `OfflinePositionStore` (Hive), `PodPhotoUploader` |
+| Repositories | `SessionRepository` (sign-in, second factor, standing, sign-out), `ConnectionRepository` (socket, renewal, why a refusal), `DutyRepository` (duty, the live position and the offline queue), `OrderRepository` (jobs and proof) |
+| ViewModels | Splash, Login, Register, PendingApproval, Tracking, Order |
 
-```
-UI (StatelessWidget)  ──watch──▶  ViewModel (ChangeNotifier, @injectable)
-                                        │ calls
-                                        ▼
-                               Services (@injectable, get_it)
-                     ┌───────────────┬───────────────┬──────────────┐
-              AuthService      ChannelClient    LocationService   TokenStore
-           (login, refresh)  (WS + Phoenix     (geolocator,     (secure
-                              protocol)         permissions)     storage)
-```
-
-### 9.2 Services (singletons via `get_it` / `injectable`)
-
-- **`ChannelClient`** — wraps `web_socket_channel`; connect, join `driver:<id>`,
-  `push(event, payload)` with ref correlation, heartbeat timer, backoff
-  reconnect, and a broadcast `Stream` of inbound events (`order_assigned`,
-  `order_updated`) plus a `ConnectionStatus` stream.
-- **`LocationService`** — `geolocator` position stream + permission handling;
-  emits throttled `TelemetryPing`s; manages the background/foreground service.
-- **`AuthService`** — login and logout via `POST /driver/session` (5.1) and
-  `TokenStore`; on an expired/invalid token, clears the session and signals a
-  re-login (no refresh token).
-- **`TokenStore`** — `flutter_secure_storage` wrapper for the driver token.
-- **`TelemetryService`** (optional) — bridges `LocationService` → `ChannelClient`,
-  applying the 3–5 s cadence and retry policy.
-
-### 9.3 ViewModels (`ChangeNotifier`, `@injectable`)
-
-- **`LoginViewModel`** — credential entry, calls `AuthService`, routes on success.
-- **`TrackingViewModel`** — subscribes to connection + position streams; owns the
-  online/offline toggle; starts/stops streaming.
-- **`OrderViewModel`** — holds the active order; exposes `pickup()` /
-  `delivered()`; retries lifecycle actions until acknowledged.
-
-ViewModels never touch `BuildContext`; navigation goes through injected
-`AppRouterState`.
-
-### 9.4 Models (`freezed`, immutable)
-
-- `DriverSession { int driverId, String token }`
-- `TelemetryPing { double latitude, longitude, DateTime recordedAt, double? speedKmh, bearingDeg }`
-- `Order { int id, OrderStatus status, int weightKg, LatLng pickup, dropoff, DateTime assignedAt }`
-- `enum ConnectionStatus { disconnected, connecting, connected, reconnecting }`
-- `enum OrderStatus { pending, assigned, pickedUp, delivered, cancelled }`
-
-All JSON (de)serialization uses `freezed` + `json_serializable`; keys map to the
-backend's snake_case payloads.
+`HTTP_BASE` and `WS_BASE` come from `--dart-define-from-file=dart_defines/<environment>.json`; there are no
+defaults, and a build without them shows an error screen instead of starting.
 
 ---
 
-## 10. Additional Packages
-
-Beyond the architecture stack already mandated in `CLAUDE.md`
-(`provider`, `get_it`, `injectable`, `freezed`) and `web_socket_channel`:
+## 9. Packages
 
 | Package | Purpose |
 | :--- | :--- |
-| `geolocator` | GPS position stream + permissions |
-| `permission_handler` | Location (incl. "always") + notification permissions |
-| `flutter_secure_storage` | Store the driver token |
-| `json_serializable` / `json_annotation` | Payload (de)serialization |
-| `flutter_foreground_task` *(Android)* | Keep streaming with the screen off |
-| `url_launcher` | Deep-link pickup/dropoff into a maps app |
-
-A visible map (`flutter_map` or `google_maps_flutter`) is **optional for V1** —
-the driver mainly needs the order and connection state, not a self-view map.
-
----
-
-## 11. Non-Functional Requirements
-
-- **Battery:** location at balanced accuracy; no ping when stationary beyond a
-  small threshold; single persistent socket, no polling.
-- **Resilience:** reconnect within seconds of signal return; lifecycle actions
-  are idempotent and retried; the app never loses an assigned order to a
-  disconnect.
-- **Background execution:** compliant foreground service (Android) and
-  background location mode (iOS), with the required permission prompts and
-  store-review justifications.
-- **Type safety:** no dynamic maps in domain code — every payload parsed into a
-  `freezed` model at the boundary.
-- **Security:** token in secure storage only; WSS in production; never log the
-  token or precise coordinates in release builds.
+| `web_socket_channel` | The socket (`IOWebSocketChannel`, which keeps the upgrade's HTTP status) |
+| `dio`, `retrofit` | Identity and matching over HTTP; the photo upload |
+| `geolocator` | Position stream, and its Android location foreground service |
+| `permission_handler` | Location "always" and notification permissions |
+| `flutter_secure_storage` | The session |
+| `hive`, `hive_flutter` | Positions recorded offline, until a `ping_batch` settles them |
+| `image_picker`, `signature`, `crypto` | The proof of delivery and its SHA-256 |
+| `url_launcher` | Pickup and drop-off in the phone's map app |
+| `provider`, `get_it`, `injectable`, `freezed`, `json_serializable` | The architecture |
 
 ---
 
-## 12. Milestones
+## 10. Non-Functional Requirements
 
-| Phase | Deliverable |
-| :--- | :--- |
-| **M0 — Skeleton** | DI + routing scaffolding, models (`freezed`), splash → login → tracking navigation. |
-| **M1 — Channel** | `ChannelClient` over `web_socket_channel`: connect, join, heartbeat, reconnect, ref-correlated replies. Prove `ping` with a manually minted token. |
-| **M2 — Location** | `LocationService` streaming real GPS → `ping` every 3–5 s, foreground; connection indicator + online toggle. |
-| **M3 — Orders** | Receive `order_assigned`/`order_updated`; order screen; `pickup`/`delivered` with retry. |
-| **M4 — Background & auth** | Background streaming; real driver login via `POST /driver/session`; expired-token → re-login handling. |
-| **M5 — Hardening** | Battery tuning, reconnect edge cases, permission flows, store-readiness. |
-
----
-
-## 13. Success Metrics
-
-- **Connectivity:** driver stays effectively connected ≥ 99% of on-duty time on normal mobile data.
-- **Freshness:** dispatcher dashboard reflects a driver's position within ~1 s of a ping.
-- **Reliability:** zero lost lifecycle actions (every pickup/delivered eventually acknowledged).
-- **Battery:** < ~5% battery/hour attributable to the app during active tracking (device-dependent target).
+- **Battery:** balanced accuracy; no ping while standing still; one socket, no polling.
+- **Resilience:** reconnect within seconds of signal returning; lifecycle actions are idempotent at matching and
+  retried; a job is never lost to a disconnect (`active_order` restores it).
+- **Background execution:** a location foreground service on Android and the location background mode on iOS,
+  with the permission prompts and store-review justifications they need.
+- **Type safety:** every payload is parsed into a `freezed` model at the repository boundary.
+- **Security:** TLS only, no cleartext in any build; the session in secure storage only; the token never in a URL
+  or a log; no precise coordinates logged in release builds.
 
 ---
 
-## 14. Out of Scope (restated)
+## 11. Success Metrics
 
-Navigation SDKs, payments/earnings, chat, ratings, and the dispatcher UI. This
-app is the driver's telemetry-and-orders terminal —
-nothing more, and deliberately so.
+- **Connectivity:** connected for at least 99% of on-duty time on normal mobile data.
+- **Freshness:** dispatch sees a position within about a second of a ping, and a courier going on duty is
+  dispatchable at once.
+- **Reliability:** every pickup and delivery is eventually acknowledged; none is shown as failed after it
+  succeeded.
+- **Battery:** under about 5% an hour attributable to the app while on duty (device-dependent target).

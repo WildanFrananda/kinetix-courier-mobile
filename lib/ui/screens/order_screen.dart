@@ -39,7 +39,14 @@ class _OrderScreenState extends State<OrderScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: switch (vm.state) {
-            OrderCancelled() => _CancelledView(onBack: vm.back),
+            OrderCancelled() => _CancelledView(
+              title: 'Order cancelled',
+              onBack: vm.back,
+            ),
+            OrderUnassigned() => _CancelledView(
+              title: 'Dispatch has taken this job off you',
+              onBack: vm.back,
+            ),
             OrderShowing(
               :final Order order,
               :final bool submitting,

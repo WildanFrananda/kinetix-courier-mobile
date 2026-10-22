@@ -46,16 +46,17 @@
 				</dict>
 			</array>
 		</dict>
-		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>FleetPulse needs your location to share it with dispatch while on duty.</string>
-		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>FleetPulse streams your location in the background so orders keep tracking.</string>
-		<key>UIBackgroundModes</key>
-		<array>
-			<string>location</string>
-			<string>fetch</string>
-		</array>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>FleetPulse takes a photo of each parcel you deliver as proof of delivery.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FleetPulse needs your location to share it with dispatch while on duty.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>FleetPulse streams your location in the background so orders keep tracking.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

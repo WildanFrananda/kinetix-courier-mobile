@@ -1,8 +1,9 @@
 part of '../../screens/order_screen.dart';
 
 class _CancelledView extends StatelessWidget {
-  const _CancelledView({required this.onBack});
+  const _CancelledView({required this.title, required this.onBack});
 
+  final String title;
   final VoidCallback onBack;
 
   @override
@@ -11,7 +12,7 @@ class _CancelledView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Text('Order cancelled'),
+          Text(title, textAlign: TextAlign.center),
           const SizedBox(height: 12),
           FilledButton(onPressed: onBack, child: const Text('Back')),
         ],

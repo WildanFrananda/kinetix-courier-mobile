@@ -16,8 +16,6 @@ class _MockVm extends Mock implements RegisterViewModel {
   bool get hasListeners => false;
 }
 
-
-
 Future<void> _pump(WidgetTester tester, RegisterViewModel vm) {
   return tester.pumpWidget(
     MaterialApp(
@@ -29,7 +27,6 @@ Future<void> _pump(WidgetTester tester, RegisterViewModel vm) {
     ),
   );
 }
-
 
 void main() {
   late _MockVm vm;
@@ -49,7 +46,9 @@ void main() {
       'Full Name',
       'Email',
       'Phone Number',
-      'Password (min. 12 characters)',
+      'Password',
+      '12 characters or more, at most 72 bytes',
+      '8 to 15 digits, optionally after a +',
       'Vehicle Plate (e.g. B 1234 XYZ)',
       'Vehicle Capacity (kg)',
     ]) {
@@ -64,7 +63,9 @@ void main() {
     verify(() => vm.submit()).called(1);
   });
 
-  testWidgets('typing an email reaches the view model', (WidgetTester tester) async {
+  testWidgets('typing an email reaches the view model', (
+    WidgetTester tester,
+  ) async {
     when(() => vm.setEmail(any())).thenReturn(null);
     await _pump(tester, vm);
 

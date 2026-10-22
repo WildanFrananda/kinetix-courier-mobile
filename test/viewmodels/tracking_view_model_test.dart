@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
+import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
 import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/telemetry_repository.dart';
 import 'package:fleet_pulse_mobile/routes/app_route.dart';
 import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 import 'package:fleet_pulse_mobile/state/state.dart';
@@ -17,7 +17,7 @@ class _MockConn extends Mock implements ConnectionRepository {}
 
 class _MockOrders extends Mock implements OrderRepository {}
 
-class _MockTele extends Mock implements TelemetryRepository {}
+class _MockDuty extends Mock implements DutyRepository {}
 
 class _MockSession extends Mock implements SessionRepository {}
 
@@ -30,70 +30,105 @@ Order _order(int id) => new Order(
   assignedAt: DateTime.utc(2026),
 );
 
-Future<void> pump() => Future<void>.delayed(Duration.zero);
+Future<void> pump() async {
+  for (int i = 0; i < 4; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
 
 void main() {
   late _MockConn conn;
   late _MockOrders orders;
-  late _MockTele tele;
+  late _MockDuty duty;
   late _MockSession session;
   late AppRouterState router;
+  late bool onDuty;
 
   late StreamController<ConnectionStatus> statusCtrl;
   late StreamController<TelemetryPing> pingCtrl;
+  late StreamController<DriverAvailability> availabilityCtrl;
+  late StreamController<Failure> problemCtrl;
   late StreamController<Order?> orderCtrl;
-  late StreamController<void> expiredCtrl;
+  late StreamController<SessionEnd> endCtrl;
 
   setUpAll(() {
     registerFallbackValue(
-      const DriverSession(driverId: DriverId(0), token: '', refreshToken: 'refresh-token'),
+      const DriverSession(
+        driverId: DriverId(0),
+        token: '',
+        refreshToken: 'refresh-token',
+      ),
     );
   });
 
   setUp(() {
     conn = new _MockConn();
     orders = new _MockOrders();
-    tele = new _MockTele();
+    duty = new _MockDuty();
     session = new _MockSession();
     router = new AppRouterState();
+    onDuty = false;
 
     statusCtrl = StreamController<ConnectionStatus>.broadcast();
     pingCtrl = StreamController<TelemetryPing>.broadcast();
+    availabilityCtrl = StreamController<DriverAvailability>.broadcast();
+    problemCtrl = StreamController<Failure>.broadcast();
     orderCtrl = StreamController<Order?>.broadcast();
-    expiredCtrl = StreamController<void>.broadcast();
+    endCtrl = StreamController<SessionEnd>.broadcast();
 
     when(() => conn.statusStream).thenAnswer((_) => statusCtrl.stream);
-    when(() => tele.sent).thenAnswer((_) => pingCtrl.stream);
+    when(() => conn.sessionEnded).thenAnswer((_) => endCtrl.stream);
+    when(() => duty.sent).thenAnswer((_) => pingCtrl.stream);
+    when(() => duty.availability).thenAnswer((_) => availabilityCtrl.stream);
+    when(() => duty.problems).thenAnswer((_) => problemCtrl.stream);
+    when(() => duty.onDuty).thenAnswer((_) => onDuty);
     when(() => orders.watchActiveOrder()).thenAnswer((_) => orderCtrl.stream);
-    when(() => conn.sessionExpired).thenAnswer((_) => expiredCtrl.stream);
     when(() => session.currentSession()).thenAnswer(
-      (_) async => const DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'refresh-token'),
+      (_) async => const DriverSession(
+        driverId: DriverId(1),
+        token: 't',
+        refreshToken: 'refresh-token',
+      ),
     );
     when(() => conn.connect(any())).thenAnswer((_) async {});
-    when(
-      () => conn.setStatus(any()),
-    ).thenAnswer((_) async => const Ok<Unit>(Unit.unit));
     when(() => conn.disconnect()).thenAnswer((_) async {});
-    when(() => tele.start()).thenAnswer((_) async => const Ok<Unit>(Unit.unit));
-    when(() => tele.stop()).thenAnswer((_) async {});
+    when(() => duty.goOnDuty()).thenAnswer((_) async {
+      onDuty = true;
+
+      return const Ok<DriverAvailability>(DriverAvailability.online);
+    });
+    when(() => duty.goOffDuty()).thenAnswer((_) async {
+      onDuty = false;
+
+      return const Ok<DriverAvailability>(DriverAvailability.offline);
+    });
     when(() => session.logout()).thenAnswer((_) async {});
   });
 
   tearDown(() async {
     await statusCtrl.close();
     await pingCtrl.close();
+    await availabilityCtrl.close();
+    await problemCtrl.close();
     await orderCtrl.close();
-    await expiredCtrl.close();
+    await endCtrl.close();
   });
 
   TrackingViewModel build() =>
-      new TrackingViewModel(router, conn, orders, tele, session);
+      new TrackingViewModel(router, conn, orders, duty, session);
 
-  test('connected status yields TrackingOnline', () async {
+  Future<TrackingViewModel> connected() async {
     final TrackingViewModel vm = build();
     await pump();
     statusCtrl.add(ConnectionStatus.connected);
     await pump();
+
+    return vm;
+  }
+
+  test('connected status yields TrackingOnline', () async {
+    final TrackingViewModel vm = await connected();
+
     expect(vm.state, isA<TrackingOnline>());
   });
 
@@ -107,50 +142,116 @@ void main() {
     expect(router.stack.whereType<OrderRoute>().length, 1);
   });
 
-  test('toggleDuty online starts telemetry and sets status', () async {
-    final TrackingViewModel vm = build();
-    await pump();
-    statusCtrl.add(ConnectionStatus.connected);
-    await pump();
+  test('going on duty shows the availability the server decided', () async {
+    when(() => duty.goOnDuty()).thenAnswer((_) async {
+      onDuty = true;
+
+      return const Ok<DriverAvailability>(DriverAvailability.busy);
+    });
+    final TrackingViewModel vm = await connected();
+
     await vm.toggleDuty();
-    verify(() => tele.start()).called(1);
-    verify(() => conn.setStatus('online')).called(1);
-    expect((vm.state as TrackingOnline).onDuty, isTrue);
+
+    final TrackingOnline state = vm.state as TrackingOnline;
+    expect(state.onDuty, isTrue);
+    expect(state.availability, DriverAvailability.busy);
   });
 
-  test('busy reflects an active order', () async {
-    final TrackingViewModel vm = build();
-    await pump();
-    statusCtrl.add(ConnectionStatus.connected);
-    await pump();
+  test('going off duty asks the duty repository', () async {
+    final TrackingViewModel vm = await connected();
+    await vm.toggleDuty();
+
+    await vm.toggleDuty();
+
+    verify(() => duty.goOffDuty()).called(1);
+    expect(
+      (vm.state as TrackingOnline).availability,
+      DriverAvailability.offline,
+    );
+  });
+
+  test('an active job shows the courier busy while on duty', () async {
+    final TrackingViewModel vm = await connected();
+    await vm.toggleDuty();
 
     orderCtrl.add(_order(5));
     await pump();
-    expect((vm.state as TrackingOnline).busy, isTrue);
+    expect((vm.state as TrackingOnline).availability, DriverAvailability.busy);
 
     orderCtrl.add(null);
     await pump();
-    expect((vm.state as TrackingOnline).busy, isFalse);
+    expect(
+      (vm.state as TrackingOnline).availability,
+      DriverAvailability.online,
+    );
   });
 
   test('toggleDuty blocked on permission failure', () async {
-    when(
-      () => tele.start(),
-    ).thenAnswer((_) async => const Err<Unit>(PermissionFailure()));
-    final TrackingViewModel vm = build();
-    await pump();
-    statusCtrl.add(ConnectionStatus.connected);
-    await pump();
+    when(() => duty.goOnDuty()).thenAnswer(
+      (_) async => const Err<DriverAvailability>(PermissionFailure()),
+    );
+    final TrackingViewModel vm = await connected();
+
     await vm.toggleDuty();
+
     expect((vm.state as TrackingOnline).permissionBlocked, isTrue);
   });
 
-  test('sessionExpired routes to Login', () async {
-    build();
+  test('a telemetry problem is shown to the courier', () async {
+    final TrackingViewModel vm = await connected();
+
+    problemCtrl.add(const ChannelFailure('invalid_telemetry'));
     await pump();
-    expiredCtrl.add(null);
-    await pump();
-    await pump();
-    expect(router.stack.last, isA<LoginRoute>());
+
+    expect((vm.state as TrackingOnline).lastMessage, contains('date and time'));
   });
+
+  test(
+    'a session that ended (a refresh refused after a second-factor change) signs out cleanly',
+    () async {
+      build();
+      await pump();
+
+      endCtrl.add(const SessionSignedOut());
+      await pump();
+
+      verifyInOrder(<void Function()>[
+        () => duty.goOffDuty(),
+        () => conn.disconnect(),
+        () => session.logout(),
+      ]);
+      expect(router.stack.single, isA<LoginRoute>());
+    },
+  );
+
+  test(
+    'an account not approved goes to the waiting screen and keeps the session',
+    () async {
+      build();
+      await pump();
+
+      endCtrl.add(const SessionNotApproved());
+      await pump();
+
+      expect(router.stack.single, isA<PendingApprovalRoute>());
+      verify(() => conn.disconnect()).called(1);
+      verifyNever(() => session.logout());
+    },
+  );
+
+  test(
+    'logout goes off duty, closes the socket, then ends the session',
+    () async {
+      final TrackingViewModel vm = await connected();
+
+      await vm.logout();
+
+      verifyInOrder(<void Function()>[
+        () => duty.goOffDuty(),
+        () => conn.disconnect(),
+        () => session.logout(),
+      ]);
+      expect(router.stack.single, isA<LoginRoute>());
+    },
+  );
 }

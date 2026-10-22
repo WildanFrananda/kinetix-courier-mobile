@@ -32,6 +32,7 @@ void main() {
   late AppRouterState router;
   late OrderViewModel sut;
   late StreamController<Order?> orderCtrl;
+  late StreamController<OrderId> unassignedCtrl;
 
   setUpAll(() => registerFallbackValue(const OrderId(0)));
 
@@ -40,7 +41,11 @@ void main() {
     maps = new _MockMaps();
     router = new AppRouterState();
     orderCtrl = StreamController<Order?>.broadcast();
+    unassignedCtrl = StreamController<OrderId>.broadcast();
     when(() => orders.watchActiveOrder()).thenAnswer((_) => orderCtrl.stream);
+    when(
+      () => orders.watchUnassigned(),
+    ).thenAnswer((_) => unassignedCtrl.stream);
     when(
       () => orders.pickup(any()),
     ).thenAnswer((_) async => const Ok<Unit>(Unit.unit));
@@ -60,7 +65,12 @@ void main() {
     sut = new OrderViewModel(router, orders, maps);
   });
 
-  tearDown(() => orderCtrl.close());
+  tearDown(() async {
+    await orderCtrl.close();
+    await unassignedCtrl.close();
+  });
+
+  const String signature = 'data:image/png;base64,AAAA';
 
   test('bind seeds OrderShowing', () {
     sut.bind(_order(OrderStatus.assigned));
@@ -90,6 +100,7 @@ void main() {
     router.push(new OrderRoute(order: _order(OrderStatus.pickedUp)));
     sut.bind(_order(OrderStatus.pickedUp));
     await sut.attachPhoto('/tmp/photo.jpg');
+    sut.setPodSignature(signature);
     await sut.delivered();
     expect(router.stack.last, isA<SplashRoute>());
   });
@@ -113,6 +124,7 @@ void main() {
     sut.bind(_order(OrderStatus.pickedUp));
 
     await sut.attachPhoto('/tmp/photo.jpg');
+    sut.setPodSignature(signature);
 
     expect(sut.canDeliver, isTrue);
     await sut.delivered();
@@ -120,7 +132,7 @@ void main() {
       () => orders.delivered(
         const OrderId(5),
         podPhotoUrl: 'https://storage.test/kinetix-pod/pod/5/a.jpg',
-        podSignature: any(named: 'podSignature'),
+        podSignature: signature,
       ),
     ).called(1);
   });
@@ -146,5 +158,52 @@ void main() {
     orderCtrl.add(null);
     await pump();
     expect(sut.state, isA<OrderCancelled>());
+  });
+
+  test('a delivery cannot be marked without the signature', () async {
+    sut.bind(_order(OrderStatus.pickedUp));
+
+    await sut.attachPhoto('/tmp/photo.jpg');
+
+    expect(sut.canDeliver, isFalse);
+    await sut.delivered();
+    verifyNever(
+      () => orders.delivered(
+        any(),
+        podPhotoUrl: any(named: 'podPhotoUrl'),
+        podSignature: any(named: 'podSignature'),
+      ),
+    );
+  });
+
+  test('a job dispatch takes off the courier says so', () async {
+    sut.bind(_order(OrderStatus.assigned));
+    await pump();
+
+    unassignedCtrl.add(const OrderId(5));
+    orderCtrl.add(null);
+    await pump();
+
+    expect(sut.state, isA<OrderUnassigned>());
+  });
+
+  test('another job taken off the courier changes nothing here', () async {
+    sut.bind(_order(OrderStatus.assigned));
+    await pump();
+
+    unassignedCtrl.add(const OrderId(9));
+    await pump();
+
+    expect(sut.state, isA<OrderShowing>());
+  });
+
+  test('an update to this job is shown', () async {
+    sut.bind(_order(OrderStatus.assigned));
+    await pump();
+
+    orderCtrl.add(_order(OrderStatus.pickedUp));
+    await pump();
+
+    expect((sut.state as OrderShowing).order.status, OrderStatus.pickedUp);
   });
 }

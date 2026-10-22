@@ -3,15 +3,14 @@ import 'dart:async';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
+import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
 import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/telemetry_repository.dart';
+import 'package:fleet_pulse_mobile/routes/app_route.dart';
+import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 import 'package:fleet_pulse_mobile/state/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart' hide Order;
-
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 
 @injectable
 class TrackingViewModel extends ChangeNotifier {
@@ -19,14 +18,16 @@ class TrackingViewModel extends ChangeNotifier {
     this._router,
     this._connection,
     this._orders,
-    this._telemetry,
+    this._duty,
     this._session,
   ) {
     _connSub = _connection.statusStream.listen(_onStatus);
-    _pingSub = _telemetry.sent.listen(_onPing);
+    _pingSub = _duty.sent.listen(_onPing);
+    _availabilitySub = _duty.availability.listen(_onAvailability);
+    _problemSub = _duty.problems.listen(_onProblem);
     _orderSub = _orders.watchActiveOrder().listen(_onOrder);
-    _authSub = _connection.sessionExpired.listen(
-      (_) => unawaited(_onExpired()),
+    _endSub = _connection.sessionEnded.listen(
+      (SessionEnd end) => unawaited(_onSessionEnded(end)),
     );
     unawaited(_init());
   }
@@ -34,18 +35,20 @@ class TrackingViewModel extends ChangeNotifier {
   final AppRouterState _router;
   final ConnectionRepository _connection;
   final OrderRepository _orders;
-  final TelemetryRepository _telemetry;
+  final DutyRepository _duty;
   final SessionRepository _session;
 
   StreamSubscription<ConnectionStatus>? _connSub;
   StreamSubscription<TelemetryPing>? _pingSub;
+  StreamSubscription<DriverAvailability>? _availabilitySub;
+  StreamSubscription<Failure>? _problemSub;
   StreamSubscription<Order?>? _orderSub;
-  StreamSubscription<void>? _authSub;
+  StreamSubscription<SessionEnd>? _endSub;
 
   TrackingState _state = const TrackingConnecting();
   ConnectionStatus _conn = ConnectionStatus.connecting;
-  bool _onDuty = false;
-  bool _busy = false;
+  DriverAvailability _availability = DriverAvailability.offline;
+  bool _hasJob = false;
   TelemetryPing? _lastPing;
   String? _message;
   bool _permissionBlocked = false;
@@ -53,7 +56,7 @@ class TrackingViewModel extends ChangeNotifier {
 
   TrackingState get state => _state;
 
-  Future<void> openSettings() => _telemetry.openAppSettings();
+  Future<void> openSettings() => _duty.openAppSettings();
 
   Future<void> _init() async {
     final DriverSession? s = await _session.currentSession();
@@ -68,40 +71,41 @@ class TrackingViewModel extends ChangeNotifier {
   }
 
   Future<void> toggleDuty() async {
-    if (_onDuty) {
-      await _telemetry.stop();
-      await _connection.setStatus('offline');
+    final Result<DriverAvailability> res = _duty.onDuty
+        ? await _duty.goOffDuty()
+        : await _duty.goOnDuty();
 
-      _onDuty = false;
-    } else {
-      final Result<Unit> res = await _telemetry.start();
-
-      switch (res) {
-        case Ok<Unit>():
-          _onDuty = true;
-          await _connection.setStatus('online');
-        case Err<Unit>(:final failure):
-          _message = failure.message;
-          _permissionBlocked = failure is PermissionFailure;
-      }
+    switch (res) {
+      case Ok<DriverAvailability>(:final DriverAvailability value):
+        _availability = value;
+        _message = null;
+        _permissionBlocked = false;
+      case Err<DriverAvailability>(:final Failure failure):
+        _message = failure.message;
+        _permissionBlocked = failure is PermissionFailure;
     }
 
     _recompute();
   }
 
   Future<void> logout() async {
-    await _telemetry.stop();
-    await _connection.setStatus('offline');
-    await _session.logout();
+    await _duty.goOffDuty();
     await _connection.disconnect();
+    await _session.logout();
     _router.replaceAll(const LoginRoute());
   }
 
-  Future<void> _onExpired() async {
-    await _telemetry.stop();
-    await _session.logout();
+  Future<void> _onSessionEnded(SessionEnd end) async {
+    await _duty.goOffDuty();
     await _connection.disconnect();
-    _router.replaceAll(const LoginRoute());
+
+    switch (end) {
+      case SessionSignedOut():
+        await _session.logout();
+        _router.replaceAll(const LoginRoute());
+      case SessionNotApproved():
+        _router.replaceAll(const PendingApprovalRoute());
+    }
   }
 
   void _onStatus(ConnectionStatus s) {
@@ -114,16 +118,26 @@ class TrackingViewModel extends ChangeNotifier {
     _recompute();
   }
 
+  void _onAvailability(DriverAvailability availability) {
+    _availability = availability;
+    _recompute();
+  }
+
+  void _onProblem(Failure failure) {
+    _message = failure.message;
+    _recompute();
+  }
+
   void _onOrder(Order? order) {
-    _busy =
+    _hasJob =
         order != null &&
         (order.status == OrderStatus.assigned ||
             order.status == OrderStatus.pickedUp);
 
     if (order == null) {
       _showOrderId = null;
-
       _recompute();
+
       return;
     }
 
@@ -135,6 +149,14 @@ class TrackingViewModel extends ChangeNotifier {
     _recompute();
   }
 
+  DriverAvailability get _shownAvailability {
+    if (!_duty.onDuty) {
+      return DriverAvailability.offline;
+    }
+
+    return _hasJob ? DriverAvailability.busy : _availability;
+  }
+
   void _recompute() {
     _state = switch (_conn) {
       ConnectionStatus.disconnected => const TrackingOffline(),
@@ -142,8 +164,8 @@ class TrackingViewModel extends ChangeNotifier {
       ConnectionStatus.reconnecting => const TrackingConnecting(),
       ConnectionStatus.connected => new TrackingOnline(
         connection: _conn,
-        onDuty: _onDuty,
-        busy: _busy,
+        onDuty: _duty.onDuty,
+        availability: _shownAvailability,
         permissionBlocked: _permissionBlocked,
         lastPing: _lastPing,
         lastMessage: _message,
@@ -156,8 +178,10 @@ class TrackingViewModel extends ChangeNotifier {
   void dispose() {
     unawaited(_connSub?.cancel());
     unawaited(_pingSub?.cancel());
+    unawaited(_availabilitySub?.cancel());
+    unawaited(_problemSub?.cancel());
     unawaited(_orderSub?.cancel());
-    unawaited(_authSub?.cancel());
+    unawaited(_endSub?.cancel());
     super.dispose();
   }
 }

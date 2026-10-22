@@ -36,14 +36,18 @@ class RegisterScreen extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone Number'),
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                helperText: '8 to 15 digits, optionally after a +',
+              ),
               onChanged: vm.setPhone,
             ),
             const SizedBox(height: 12),
             TextField(
               obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'Password (min. 12 characters)',
+                labelText: 'Password',
+                helperText: '12 characters or more, at most 72 bytes',
               ),
               onChanged: vm.setPassword,
             ),
@@ -59,6 +63,7 @@ class RegisterScreen extends StatelessWidget {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Vehicle Capacity (kg)',
+                helperText: '1 to 5000',
               ),
               onChanged: vm.setCapacityKg,
             ),

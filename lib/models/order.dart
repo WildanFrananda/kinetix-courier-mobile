@@ -20,6 +20,5 @@ abstract class Order with _$Order {
     @JsonKey(name: 'pod_signature') String? podSignature,
   }) = _Order;
 
-
   factory Order.fromJson(Map<String, dynamic> json) => _$OrderFromJson(json);
 }

@@ -1,11 +1,13 @@
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:flutter/foundation.dart';
-import 'package:injectable/injectable.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:injectable/injectable.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 
 @lazySingleton
 class LocationService {
+  static const Duration _interval = Duration(seconds: 4);
+
   Future<void> openAppSettings() => Geolocator.openAppSettings();
   Future<void> openLocationSettings() => Geolocator.openLocationSettings();
 
@@ -42,18 +44,19 @@ class LocationService {
     return LocationPermissionStatus.granted;
   }
 
-  Stream<Position> positions({int distanceFilter = 0}) {
-    return Geolocator.getPositionStream(
-      locationSettings: _settings(distanceFilter),
-    );
+  Future<void> requestNotificationPermission() async {
+    await ph.Permission.notification.request();
   }
 
-  LocationSettings _settings(int distanceFilter) {
+  Stream<Position> positions() {
+    return Geolocator.getPositionStream(locationSettings: _settings());
+  }
+
+  LocationSettings _settings() {
     if (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS) {
       return new AppleSettings(
         accuracy: LocationAccuracy.medium,
-        distanceFilter: distanceFilter,
         allowBackgroundLocationUpdates: true,
         showBackgroundLocationIndicator: true,
         pauseLocationUpdatesAutomatically: false,
@@ -61,9 +64,17 @@ class LocationService {
       );
     }
 
-    return new LocationSettings(
+    return new AndroidSettings(
       accuracy: LocationAccuracy.medium,
-      distanceFilter: distanceFilter,
+      intervalDuration: _interval,
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'FleetPulse is on duty',
+        notificationText: 'Sharing your location with dispatch while on duty',
+        notificationChannelName: 'Duty tracking',
+        enableWakeLock: true,
+        enableWifiLock: true,
+        setOngoing: true,
+      ),
     );
   }
 }

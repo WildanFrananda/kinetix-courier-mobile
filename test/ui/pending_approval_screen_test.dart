@@ -16,13 +16,12 @@ class _MockVm extends Mock implements PendingApprovalViewModel {
   bool get hasListeners => false;
 }
 
-
-
 void main() {
   testWidgets('renders message and returns to login', (
     WidgetTester tester,
   ) async {
     final _MockVm vm = new _MockVm();
+    when(vm.backToLogin).thenAnswer((_) async {});
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(splashFactory: InkRipple.splashFactory),
@@ -32,7 +31,6 @@ void main() {
         ),
       ),
     );
-
 
     expect(
       find.text('Your account is awaiting admin approval'),

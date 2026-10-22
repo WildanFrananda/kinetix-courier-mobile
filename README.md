@@ -1,58 +1,72 @@
-# 📱 Kinetix Courier Mobile App (`kinetix-courier-mobile`)
+# Kinetix Courier Mobile App (`kinetix-courier-mobile`)
 
-Cross-platform Flutter mobile application (iOS & Android) managed via **FVM (Flutter Version Management)** designed for delivery couriers to accept dispatches, capture Proof of Delivery (POD), cache offline GPS telemetry in Hive DB, and stream location updates back to `kinetix-matching-service`.
+The courier's app for the Kinetix fleet, in Flutter for Android and iOS, managed with FVM. A courier registers,
+waits for an administrator's approval, signs in (with a second factor when the account has one), goes on duty,
+streams its position to `kinetix-matching-service` (keeping what it records offline in Hive and sending it
+later as history), and carries jobs from pickup to a delivery proved by a photo
+and the receiver's signature.
 
----
+Every call goes through the edge, Kong (`kinetix-api-gateway`), over TLS:
 
-## 🏛️ Resolved Audit Upgrades & Production Hardening
+| What | Where | Owner |
+| --- | --- | --- |
+| Register a courier | `POST /api/v1/couriers/register` | identity |
+| Sign in, second factor, renew, sign out | `POST /api/v1/auth/login`, `/2fa/verify`, `/refresh`, `/logout` | identity |
+| May this account drive? | `GET /api/v1/matching/driver/me` | matching |
+| Duty, position, positions recorded offline (`ping_batch`), jobs, proof of delivery | WebSocket `/ws/v1/matching/driver?vsn=2.0.0` (Phoenix channel `driver:<id>`) | matching |
+| The delivery photo | the presigned `PUT` matching hands out (`pod_upload`) | object store, through Kong |
 
-1. **Real Proof of Delivery (POD) Camera & Signature Canvas**:
-   - Integrated `image_picker` for real device camera photo capture (`Capture Photo`) and `signature` package for an interactive digital signature drawing canvas modal (`Add Signature`), eliminating fake hardcoded strings.
-2. **Offline Hive Database GPS Telemetry Caching**:
-   - Implemented `HiveTelemetryDb` helper powered by `hive` and `hive_flutter`. Location pings recorded during network drops (in tunnels/basements) are cached locally in Hive key-value storage and automatically flushed when the WebSocket connection is re-established.
-3. **Single Source of Truth Identity & Gateway Integration**:
-   - Updated `AppConfig.httpBase` to point to OpenResty API Gateway (`http://10.0.2.2:8080`) and redirected `DriverApi.login` to `@POST('/api/v1/auth/login')`.
-4. **FVM SDK & Clean Static Analysis**:
-   - Project environment managed strictly via FVM (`.fvmrc`). Executed `fvm flutter analyze lib/` ➔ **`No issues found!`**.
+`PRD.md` describes the contract and the behaviour, and `CLAUDE.md` the architecture and the decisions the code
+cannot explain.
 
----
+## Running it
 
-## 📂 Repository Directory Structure
-
-```
-kinetix-courier-mobile/
-├── .fvm/                               # Flutter Version Management Configuration
-├── lib/
-│   ├── config/
-│   │   └── app_config.dart             # Environment & Gateway Config (:8080)
-│   ├── models/                         # Data Models & Freezed Annotations
-│   ├── repositories/                   # Domain Repositories
-│   │   └── telemetry_repository_impl.dart # Telemetry Streaming & Hive Caching
-│   ├── services/
-│   │   ├── auth/
-│   │   │   └── driver_api.dart         # Retrofit API Gateway Client
-│   │   └── offline/
-│   │       └── hive_telemetry_db.dart  # Hive Offline Ping Storage
-│   └── ui/
-│       ├── screens/
-│       │   └── order_screen.dart       # Order Details & POD Screen
-│       └── widgets/
-│           └── order/order_view.dart   # Camera & Signature Modal UI
-├── pubspec.yaml                        # Dependencies & Plugins
-└── README.md
-```
-
----
-
-## ⚡ Local Execution Guide (FVM)
+The app has no built-in addresses. `HTTP_BASE` and `WS_BASE` come from a file in `dart_defines/`, and a build
+without them opens a screen that says what is missing.
 
 ```bash
-# 1. Fetch Flutter Dependencies via FVM
 fvm flutter pub get
 
-# 2. Run Static Code Analysis via FVM
-fvm flutter analyze lib/
+fvm flutter run --dart-define-from-file=dart_defines/lab.json
 
-# 3. Launch App on Emulator / Device via FVM
-fvm flutter run
+bin/build production apk
+bin/build production appbundle
+bin/build production ipa
+```
+
+`dart_defines/lab.json` names the lab's edge, `https://localhost:8443`. On an Android emulator, forward it with
+`adb reverse tcp:8443 tcp:8443`. The lab's certificate is issued by the lab's own CA, which the phone must trust.
+
+## Checks
+
+```bash
+fvm dart run build_runner build --delete-conflicting-outputs
+fvm flutter analyze
+fvm flutter test --coverage
+fvm flutter test integration_test -d flutter-tester
+```
+
+CI (`.github/workflows/ci.yaml`, `.gitlab-ci.yml`) runs the same, and fails under 70% line coverage.
+`integration_test/app_flow_test.dart` drives the whole app with fake repositories; it runs headless on
+`flutter-tester` and on a device alike.
+
+## Layout
+
+```
+lib/
+├── config/        AppConfig (the dart defines) and AppConfigCheck (refuses to start without them)
+├── core/          Result, the Failure hierarchy, the logger
+├── di/            get_it + injectable; injection.config.dart is generated
+├── models/        freezed models, ids, enums
+├── repositories/  Session, Connection, Duty and Order repositories: the domain boundary
+├── routes/        the sealed AppRoute and the Navigator 2.0 router
+├── services/
+│   ├── auth/      DriverApi (Retrofit), TokenStore, SessionRenewer, FleetStanding
+│   ├── channel/   ChannelClient (the Phoenix protocol) over WsChannelSocket
+│   ├── location/  LocationService (geolocator, with its Android foreground service)
+│   ├── offline/   OfflinePositionStore: positions recorded without a connection, in Hive
+│   └── storage/   PodPhotoUploader
+├── state/         sealed UI states and domain events
+├── ui/            screens and widgets
+└── viewmodels/    one ChangeNotifier per screen
 ```

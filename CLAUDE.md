@@ -240,20 +240,112 @@ If the user asks: *"Create a Profile screen where a user can edit their name"*, 
 
 ## 7. Decisions the code states but cannot explain
 
-### A refused session is renewed before the courier is signed out
+### A refused session is renewed once, then matching is asked why
 
-Identity's access token lives fifteen minutes and its refresh token thirty days. Until 2026-10-19 the app never
-used the refresh token: `TokenStore.read` forgot the session once the access token had expired, and a socket
-refused by matching signed the courier out. So a courier signed in again whenever the socket reconnected after
-fifteen minutes, and a signing-key rotation signed every courier out.
+Identity's access token lives fifteen minutes and its refresh token thirty days. `SessionRenewer` trades the
+refresh token for a new pair and stores both before anything uses them. It sends one request at a time for the
+whole app, because identity treats a refresh token presented twice as stolen and revokes the family. `400`/`401`
+means the refresh token is refused: the session is cleared. Anything else means identity did not answer, and the
+session is kept. `TokenStore` keeps the session as one secure-storage record written in one call, so a crash can
+never keep half of a rotated pair (identity would read the old refresh token as reuse).
 
-`SessionRenewer` trades the refresh token for a new pair and stores both before anything uses them. It sends one
-request at a time for the whole app, because identity treats a refresh token presented twice as stolen and revokes
-the family. `400`/`401` means the refresh token is refused: the session is cleared. Anything else means identity
-did not answer, and the session is kept.
+Matching refuses a driver socket at the HTTP upgrade, `403` with no body, for an expired token, a token whose role
+is not `courier`, an account with no vehicle and a courier who is pending or deactivated alike; `503` means it could
+not ask identity. `ConnectionRepositoryImpl` answers a refusal by renewing and reconnecting. A second refusal
+before a connection has held is real, and the app asks `GET /api/v1/matching/driver/me` what it is:
+`403 pending_approval` ends the session as `SessionNotApproved` (the waiting screen, session kept, so an approved
+courier carries on at the next start); `401`, another `403` or `404` ends it as `SessionSignedOut`; no answer is
+retried after 1, 2, 4 … up to 30 seconds, and at once when the app returns to the foreground. A join refused with
+`pending_approval` is `SessionNotApproved` at once. Splash asks the same question before it opens the socket, so a
+courier who registered and is still waiting never reaches the tracking screen.
 
-`ConnectionRepositoryImpl` answers a refused socket by renewing and reconnecting. `sessionExpired` fires only when
-the renewal is refused, or when the socket is refused again before a renewed connection has held, which is a real
-refusal (an account deactivated, say) and must not loop. While identity cannot be reached it tries again after 1,
-2, 4 … up to 30 seconds, and at once when the app returns to the foreground. `SessionRepository.currentSession`
-renews an expired access token at start-up and keeps the stored session if identity cannot be reached.
+### The socket is Kong's route, and its token is a subprotocol
+
+The URL is `<WS_BASE>/ws/v1/matching/driver?vsn=2.0.0`. Kong's route strips `/ws/v1/matching/driver` and sends
+the rest after the service path `/driver/websocket`, which is Phoenix's socket; `/ws/v1/matching/driver/websocket`
+reaches `/driver/websocket/websocket` and Phoenix answers 404 (production, 2026-10-21). The access token is not in
+the URL, which Kong's access log records: it is offered in `Sec-WebSocket-Protocol` as
+`base64url.bearer.phx.<the token, standard base64, padding removed>` beside `phoenix`. Despite the prefix, Phoenix
+decodes it with `Base.decode64!(…, padding: false)`, the standard alphabet; a JWT encodes to the same characters
+in both.
+
+`WsChannelSocket` connects with `IOWebSocketChannel.connect`, not `WebSocketChannel.connect`: the latter goes
+through `package:web_socket` 1.0.1, which rethrows dart:io's `WebSocketException` without its `httpStatusCode`, so a
+refusal looked exactly like an outage and a pending courier reconnected forever. `401`/`403` at the upgrade is a
+refusal; every other status, and an address nothing answers, is retried. `socket_handshake_test.dart` proves both
+against a real local server.
+
+### Duty is declared after every join
+
+Joining `driver:<id>` puts nobody on duty; the join reply carries the status matching holds. While the courier is
+on duty the app sends `status online` after every join (a disconnect took it off duty) and, once that succeeds,
+one `ping` at once with the newest fix, moved or not, because matching dispatches only on a position received
+after the courier went on duty. A courier off duty whose join finds it online is set `offline`. The `status` reply
+is what matching decided (`online` is `busy` while the courier carries a job), and that is what the screen shows.
+A `status` whose reply was lost is asked again on the next four-second tick. `recorded_at` is the fix's own time,
+never the send time.
+
+### Positions recorded offline go as `ping_batch`, never as `ping`
+
+Matching keeps one live position per courier, the newest by `recorded_at`, and ignores an older `ping`; so a fix
+that could not go live never goes through `ping` later. A fix is kept in the Hive box `offline_positions`
+(`OfflinePositionStore`, a lazy box keyed by the fix's microseconds since the epoch, so one moment is one entry and
+the keys sort oldest first) whenever it cannot be sent live: no socket, joined but `status online` not yet
+answered, or a `ping` whose push failed or timed out. The five-metre filter applies to kept fixes as to live ones.
+
+The queue is sent with `ping_batch` (`{"pings": [ping fields, ...]}`), which matching stores as history and never
+as the live position. It starts after the join, `status online` and the fresh live fix (or right after a join while
+off duty, when there is no live position to put first), oldest first, at most 100 positions per batch, one batch
+in flight and one timer at most: a live ping that succeeds while a batch is pending or a retry is scheduled starts
+nothing. An `ok` reply settles the whole batch, `refused` entries included, and only then is the batch deleted. An
+error reply (`unavailable`, `invalid_batch`, `batch_too_large`) or no reply keeps it and retries after 5 s,
+doubling up to 5 min; `rate_limited` waits the 60 s window, because matching allows 30 batches a minute (apart
+from the live pings' 100 per 10 s) and says nothing about when to come back. Batches that succeed go 2.5 s apart,
+24 a minute. A disconnect cancels the scheduled batch; the next join starts again. Positions older than 24 hours
+are deleted before each batch rather than sent, because matching refuses them as `too_old`.
+
+The box holds at most 21,600 positions, the oldest dropped first: a day of driving at the four-second cadence,
+which is everything matching would still accept. A lazy box keeps only its keys in memory and reads positions
+from disk when a batch is made, so a full box costs a few megabytes of memory and of disk, and it drains in about
+nine minutes at 24 batches a minute.
+
+`rate_limited` on a live ping pauses live pings for ten seconds; `invalid_telemetry` (a phone clock more than five
+minutes ahead) is shown to the courier and that fix is not sent again.
+
+### Background tracking is geolocator's foreground service
+
+On Android the position stream is started with `ForegroundNotificationConfig`, so geolocator's own location
+foreground service runs exactly while the courier is on duty and stops with the stream, or with the process.
+`flutter_foreground_task` was removed: its task handler was empty, the app's work never ran in it, and its
+service outlived the Flutter engine with a notification saying the location was shared while nothing was sent. On
+iOS `UIBackgroundModes` `location` sits at the top level of `Info.plist` (it was inside the scene manifest, where
+iOS does not read it) and the stream allows background updates.
+
+### Signing out reaches identity first
+
+`SessionRepository.logout` calls `POST /api/v1/auth/logout` with the access token and the refresh token, so the
+refresh family ends at identity; an expired access token is renewed once for it. If identity cannot be reached
+within five seconds the courier is signed out on the phone anyway, and that refresh token stays valid at identity
+until it expires: the courier's choice to sign out wins over an unreachable server. Enabling or disabling a second
+factor elsewhere ends this session; the next renewal is refused and the courier is signed out like any refusal.
+
+### The build names the edge
+
+`HTTP_BASE` and `WS_BASE` have no defaults. They come from `--dart-define-from-file=dart_defines/<environment>.json`
+(`bin/build` passes it), must be `https://` and `wss://` with no path, and an app built without them shows what is
+missing instead of starting. The Android manifest allows no cleartext.
+
+### Proof of delivery
+
+`delivered` needs the photo URL and the signature (`signature_required` without it). The camera photo is taken at
+most 1920 px on a side at JPEG quality 85, so it stays far below the gateway's 16 MB storage limit, and is refused
+before it is hashed unless its first bytes are a JPEG's, which matching checks too. A `pickup` or `delivered` whose
+reply was lost is retried; matching answers the repeat `ok`, so the courier sees success.
+`proof_unverifiable` is retried as well.
+
+### A repository the container disposes declares `dispose`
+
+`injectable` types the dispose callback by the registered interface, so `ConnectionRepository` and
+`DutyRepository` declare `dispose()`. At `ed533f7` `ConnectionRepository` did not, and the generated container,
+which neither `flutter analyze` (it skips `*.config.dart`) nor the unit tests compiled, broke every build of the
+app. `test/di/injection_test.dart` builds the container in the unit suite.

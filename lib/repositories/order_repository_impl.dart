@@ -15,6 +15,9 @@ import 'package:injectable/injectable.dart' hide Order;
 class OrderRepositoryImpl with RetryMixin implements OrderRepository {
   OrderRepositoryImpl(this._channel, this._uploader);
 
+  static const List<int> _jpegMagic = <int>[0xFF, 0xD8, 0xFF];
+  static const String _proofUnverifiable = 'proof_unverifiable';
+
   final ChannelClient _channel;
   final PodPhotoUploader _uploader;
 
@@ -30,9 +33,19 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
       yield switch (event) {
         ActiveOrderEvent(:final Order? order) => order,
         OrderAssignedEvent(:final Order order) => order,
-        OrderUpdatedEvent(:final Order order) =>
-          order.status == OrderStatus.cancelled ? null : order,
+        OrderUpdatedEvent(:final Order? order) =>
+          order == null || order.status == OrderStatus.cancelled ? null : order,
+        OrderUnassignedEvent() => null,
       };
+    }
+  }
+
+  @override
+  Stream<OrderId> watchUnassigned() async* {
+    await for (final ChannelEvent e in _channel.events) {
+      if (_toServerEvent(e) case OrderUnassignedEvent(:final OrderId id)) {
+        yield id;
+      }
     }
   }
 
@@ -53,6 +66,14 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
       return const Err<String>(PodPhotoFailure());
     }
 
+    if (!_isJpeg(bytes)) {
+      return const Err<String>(
+        PodPhotoFailure(
+          'the camera did not return a JPEG photo; take it again',
+        ),
+      );
+    }
+
     final String photoSha256 = sha256.convert(bytes).toString();
     final ChannelReply reply;
 
@@ -66,7 +87,18 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
       return new Err<String>(failureFromReason(reply.reason));
     }
 
-    final PodUpload upload = PodUpload.fromJson(reply.response);
+    final PodUpload upload;
+
+    try {
+      upload = PodUpload.fromJson(reply.response);
+    } on Object catch (e) {
+      AppLogger.error(
+        'matching sent an upload address this app cannot read',
+        error: e,
+      );
+
+      return const Err<String>(PodPhotoFailure());
+    }
 
     try {
       await _uploader.upload(upload.uploadUrl, bytes, upload.uploadHeaders);
@@ -80,8 +112,8 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
   @override
   Future<Result<Unit>> delivered(
     OrderId orderId, {
-    String? podPhotoUrl,
-    String? podSignature,
+    required String podPhotoUrl,
+    required String podSignature,
   }) => retry(
     () => _lifecycle(
       () => _channel.delivered(
@@ -90,7 +122,14 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
         podSignature: podSignature,
       ),
     ),
+    retryIf: _worthRetryingDelivery,
   );
+
+  bool _worthRetryingDelivery(Failure failure) {
+    return failure is NetworkFailure ||
+        failure is TimeoutFailure ||
+        (failure is ChannelFailure && failure.reason == _proofUnverifiable);
+  }
 
   Future<Result<Unit>> _lifecycle(
     Future<ChannelReply> Function() action,
@@ -101,30 +140,64 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
       return reply.isOk
           ? const Ok<Unit>(Unit.unit)
           : new Err<Unit>(failureFromReason(reply.reason));
-    } on ChannelException {
-      return const Err<Unit>(NetworkFailure());
     } on Object {
       return const Err<Unit>(NetworkFailure());
     }
   }
 
-  ServerEvent? _toServerEvent(ChannelEvent e) {
-    Map<String, dynamic> asOrder(Object? raw) =>
-        (raw as Map<dynamic, dynamic>).cast<String, dynamic>();
+  bool _isJpeg(Uint8List bytes) {
+    if (bytes.length < _jpegMagic.length) {
+      return false;
+    }
 
+    for (int i = 0; i < _jpegMagic.length; i++) {
+      if (bytes[i] != _jpegMagic[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  ServerEvent? _toServerEvent(ChannelEvent e) {
     return switch (e.event) {
-      'active_order' => new ActiveOrderEvent(
-        e.payload['order'] == null
-            ? null
-            : Order.fromJson(asOrder(e.payload['order'])),
-      ),
-      'order_assigned' => new OrderAssignedEvent(
-        Order.fromJson(asOrder(e.payload)),
-      ),
-      'order_updated' => new OrderUpdatedEvent(
-        Order.fromJson(asOrder(e.payload)),
-      ),
+      'active_order' => new ActiveOrderEvent(_orderOf(e.payload['order'])),
+      'order_assigned' => _assigned(e.payload),
+      'order_updated' => new OrderUpdatedEvent(_orderOf(e.payload)),
+      'order_unassigned' => _unassigned(e.payload),
       _ => null,
     };
+  }
+
+  ServerEvent? _assigned(Map<String, dynamic> payload) {
+    final Order? order = _orderOf(payload);
+
+    return order == null ? null : new OrderAssignedEvent(order);
+  }
+
+  ServerEvent? _unassigned(Map<String, dynamic> payload) {
+    final Object? id = payload['id'];
+
+    return id is int ? new OrderUnassignedEvent(new OrderId(id)) : null;
+  }
+
+  Order? _orderOf(Object? raw) {
+    if (raw is! Map<dynamic, dynamic>) {
+      return null;
+    }
+
+    final Map<String, dynamic> json = raw.cast<String, dynamic>();
+
+    if (json['status'] == 'pending' || json['assigned_at'] == null) {
+      return null;
+    }
+
+    try {
+      return Order.fromJson(json);
+    } on Object catch (e) {
+      AppLogger.error('dropped a job this app cannot read', error: e);
+
+      return null;
+    }
   }
 }

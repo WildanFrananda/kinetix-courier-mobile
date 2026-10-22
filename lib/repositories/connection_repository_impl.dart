@@ -3,19 +3,21 @@ import 'dart:math';
 
 import 'package:fleet_pulse_mobile/config/app_config.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/driver_session.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
+import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
+import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
 import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:injectable/injectable.dart';
 
 @LazySingleton(as: ConnectionRepository)
 class ConnectionRepositoryImpl implements ConnectionRepository {
-  ConnectionRepositoryImpl(this._channel, this._renewer) {
-    _refusedSub = _channel.unauthorized.listen((_) => unawaited(_onRefused()));
+  ConnectionRepositoryImpl(this._channel, this._renewer, this._fleet) {
+    _refusedSub = _channel.refused.listen((_) => unawaited(_onRefused()));
+    _notApprovedSub = _channel.notApproved.listen(
+      (_) => _end(const SessionNotApproved()),
+    );
     _statusSub = _channel.statusStream.listen(_onStatus);
   }
 
@@ -23,13 +25,17 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
 
   final ChannelClient _channel;
   final SessionRenewer _renewer;
+  final FleetStanding _fleet;
 
-  final StreamController<void> _expired =
-      new StreamController<void>.broadcast();
+  final StreamController<SessionEnd> _ended =
+      new StreamController<SessionEnd>.broadcast();
 
   StreamSubscription<void>? _refusedSub;
+  StreamSubscription<void>? _notApprovedSub;
   StreamSubscription<ConnectionStatus>? _statusSub;
   Timer? _recoveryTimer;
+  Future<void> Function()? _pendingRecovery;
+  DriverSession? _session;
   int _recoveryAttempt = 0;
   bool _wanted = false;
   bool _renewedSinceConnected = false;
@@ -38,13 +44,15 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
   Stream<ConnectionStatus> get statusStream => _channel.statusStream;
 
   @override
-  Stream<void> get sessionExpired => _expired.stream;
+  Stream<SessionEnd> get sessionEnded => _ended.stream;
 
   @override
   void onResume() {
-    if (_recoveryTimer?.isActive ?? false) {
-      _recoveryTimer?.cancel();
-      unawaited(_recover());
+    final Future<void> Function()? pending = _pendingRecovery;
+
+    if (pending != null && (_recoveryTimer?.isActive ?? false)) {
+      _cancelRecovery();
+      unawaited(pending());
 
       return;
     }
@@ -55,6 +63,7 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
   @override
   Future<void> connect(DriverSession session) {
     _wanted = true;
+    _session = session;
     _renewedSinceConnected = false;
 
     return _channel.connect(session, wsBase: AppConfig.wsBase);
@@ -63,40 +72,10 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
   @override
   Future<void> disconnect() {
     _wanted = false;
-    _recoveryTimer?.cancel();
+    _cancelRecovery();
     _recoveryAttempt = 0;
 
     return _channel.disconnect();
-  }
-
-  @override
-  Future<Result<Unit>> sendPing(TelemetryPing ping) async {
-    try {
-      final ChannelReply reply = await _channel.ping(ping);
-
-      return reply.isOk
-          ? const Ok<Unit>(Unit.unit)
-          : new Err<Unit>(failureFromReason(reply.reason));
-    } on ChannelException {
-      return const Err<Unit>(NetworkFailure());
-    } on Object {
-      return const Err<Unit>(NetworkFailure());
-    }
-  }
-
-  @override
-  Future<Result<Unit>> setStatus(String status) async {
-    try {
-      final ChannelReply reply = await _channel.setStatus(status);
-
-      return reply.isOk
-          ? const Ok<Unit>(Unit.unit)
-          : new Err<Unit>(failureFromReason(reply.reason));
-    } on ChannelException {
-      return const Err<Unit>(NetworkFailure());
-    } on Object {
-      return const Err<Unit>(NetworkFailure());
-    }
   }
 
   void _onStatus(ConnectionStatus status) {
@@ -112,15 +91,15 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
     }
 
     if (_renewedSinceConnected) {
-      _expired.add(null);
+      await _explainRefusal();
 
       return;
     }
 
-    await _recover();
+    await _renew();
   }
 
-  Future<void> _recover() async {
+  Future<void> _renew() async {
     if (!_wanted) {
       return;
     }
@@ -133,39 +112,97 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
 
     switch (renewed) {
       case Ok<DriverSession>(:final DriverSession value):
+        _session = value;
         _renewedSinceConnected = true;
         await _channel.connect(value, wsBase: AppConfig.wsBase);
       case Err<DriverSession>(:final Failure failure)
           when failure is AuthFailure:
-        _expired.add(null);
+        _end(const SessionSignedOut());
       case Err<DriverSession>():
-        _scheduleRecovery();
+        _scheduleRecovery(_renew);
     }
   }
 
-  void _scheduleRecovery() {
+  Future<void> _explainRefusal() async {
+    final DriverSession? session = _session;
+
+    if (session == null) {
+      _end(const SessionSignedOut());
+
+      return;
+    }
+
+    final Result<DriverProfile> standing = await _fleet.check(session.token);
+
+    if (!_wanted) {
+      return;
+    }
+
+    switch (standing) {
+      case Err<DriverProfile>(:final Failure failure)
+          when failure is PendingApprovalFailure:
+        _end(const SessionNotApproved());
+      case Err<DriverProfile>(:final Failure failure)
+          when failure is AuthFailure ||
+              failure is RegistrationIncompleteFailure:
+        _end(const SessionSignedOut());
+      case Ok<DriverProfile>() || Err<DriverProfile>():
+        _scheduleRecovery(_reconnect);
+    }
+  }
+
+  Future<void> _reconnect() async {
+    final DriverSession? session = _session;
+
+    if (!_wanted || session == null) {
+      return;
+    }
+
+    await _channel.connect(session, wsBase: AppConfig.wsBase);
+  }
+
+  void _end(SessionEnd end) {
+    if (!_wanted || _ended.isClosed) {
+      return;
+    }
+
+    _wanted = false;
+    _cancelRecovery();
+    _ended.add(end);
+  }
+
+  void _scheduleRecovery(Future<void> Function() action) {
     final int seconds = min(
       maxRecoveryDelaySeconds,
       pow(2, _recoveryAttempt).toInt(),
     );
 
     AppLogger.debug(
-      'session renewal retry in ${seconds}s (attempt ${_recoveryAttempt + 1})',
+      'session recovery in ${seconds}s (attempt ${_recoveryAttempt + 1})',
     );
 
     _recoveryAttempt++;
     _recoveryTimer?.cancel();
-    _recoveryTimer = new Timer(
-      new Duration(seconds: seconds),
-      () => unawaited(_recover()),
-    );
+    _pendingRecovery = action;
+    _recoveryTimer = new Timer(new Duration(seconds: seconds), () {
+      _pendingRecovery = null;
+      unawaited(action());
+    });
   }
 
+  void _cancelRecovery() {
+    _recoveryTimer?.cancel();
+    _pendingRecovery = null;
+  }
+
+  @override
   @disposeMethod
   Future<void> dispose() async {
-    _recoveryTimer?.cancel();
+    _wanted = false;
+    _cancelRecovery();
     await _refusedSub?.cancel();
+    await _notApprovedSub?.cancel();
     await _statusSub?.cancel();
-    await _expired.close();
+    await _ended.close();
   }
 }

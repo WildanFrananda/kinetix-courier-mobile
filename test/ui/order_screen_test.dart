@@ -54,6 +54,8 @@ void main() {
     when(() => vm.back()).thenAnswer((_) async {});
     when(() => vm.podPhotoUrl).thenReturn(null);
     when(() => vm.podSignature).thenReturn(null);
+    when(() => vm.photoUploading).thenReturn(false);
+    when(() => vm.canDeliver).thenReturn(false);
   });
 
   testWidgets('assigned enables pickup, hides delivered button', (
@@ -77,11 +79,44 @@ void main() {
     verify(() => vm.pickup()).called(1);
   });
 
-  testWidgets('cancelled shows message and back button', (WidgetTester tester) async {
+  testWidgets('cancelled shows message and back button', (
+    WidgetTester tester,
+  ) async {
     when(() => vm.state).thenReturn(const OrderCancelled());
     await _pump(tester, vm, _order(OrderStatus.assigned));
     expect(find.text('Order cancelled'), findsOneWidget);
     await tester.tap(find.text('Back'));
     verify(() => vm.back()).called(1);
   });
+
+  testWidgets('a job taken off the courier says so', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.state).thenReturn(const OrderUnassigned());
+    await _pump(tester, vm, _order(OrderStatus.assigned));
+
+    expect(find.text('Dispatch has taken this job off you'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a picked-up job cannot be delivered until photo and signature exist',
+    (WidgetTester tester) async {
+      final Order order = _order(OrderStatus.pickedUp);
+      when(() => vm.state).thenReturn(new OrderShowing(order));
+      await _pump(tester, vm, order);
+
+      final ElevatedButton deliverBtn = tester.widget<ElevatedButton>(
+        find.ancestor(
+          of: find.text('Mark as Delivered'),
+          matching: find.byType(ElevatedButton),
+        ),
+      );
+
+      expect(deliverBtn.onPressed, isNull);
+      expect(
+        find.textContaining('signature are both required'),
+        findsOneWidget,
+      );
+    },
+  );
 }

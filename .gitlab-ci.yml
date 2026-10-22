@@ -23,11 +23,11 @@ analyze_and_test:
     - dart run build_runner build --delete-conflicting-outputs
     - flutter analyze
     - flutter test --coverage
+    - flutter test integration_test -d flutter-tester
     - apt-get update -qq && apt-get install -y -qq lcov
     - |
       lcov --remove coverage/lcov.info \
         '*.g.dart' \
-        '*/services/foreground/*' \
         '*/services/location/location_service.dart' \
         '*/maps/maps_launcher.dart' \
         '*/services/channel/ws_channel_socket.dart' \

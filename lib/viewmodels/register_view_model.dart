@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
@@ -10,6 +12,17 @@ import 'package:injectable/injectable.dart';
 class RegisterViewModel extends ChangeNotifier {
   RegisterViewModel(this._router, this._session);
 
+  static const int minPasswordLength = 12;
+  static const int maxPasswordBytes = 72;
+  static const int minNameLength = 2;
+  static const int maxNameLength = 120;
+  static const int maxPlateLength = 20;
+  static const int minCapacityKg = 1;
+  static const int maxCapacityKg = 5000;
+
+  static final RegExp _phonePattern = new RegExp(r'^\+?[0-9]{8,15}$');
+  static final RegExp _phoneSeparators = new RegExp(r'[\s\-.()]');
+
   final AppRouterState _router;
   final SessionRepository _session;
 
@@ -18,7 +31,7 @@ class RegisterViewModel extends ChangeNotifier {
   String _phone = '';
   String _password = '';
   String _vehiclePlate = '';
-  int _capacityKg = 100;
+  String _capacity = '';
   bool _submitting = false;
   String? _error;
   String? _successMessage;
@@ -29,39 +42,16 @@ class RegisterViewModel extends ChangeNotifier {
 
   void setEmail(String v) => _email = v.trim();
   void setName(String v) => _name = v.trim();
-  void setPhone(String v) => _phone = v.trim();
+  void setPhone(String v) => _phone = v.replaceAll(_phoneSeparators, '');
   void setPassword(String v) => _password = v;
   void setVehiclePlate(String v) => _vehiclePlate = v.trim();
-  void setCapacityKg(String v) => _capacityKg = int.tryParse(v) ?? -1;
+  void setCapacityKg(String v) => _capacity = v.trim();
 
   Future<void> submit() async {
-    if (_email.isEmpty ||
-        _name.isEmpty ||
-        _phone.isEmpty ||
-        _password.isEmpty ||
-        _vehiclePlate.isEmpty) {
-      _error = 'All fields are required';
-      notifyListeners();
+    final String? problem = _problem();
 
-      return;
-    }
-
-    if (!_email.contains('@')) {
-      _error = 'Enter a valid email address';
-      notifyListeners();
-
-      return;
-    }
-
-    if (_capacityKg <= 0) {
-      _error = 'Capacity must be a number greater than zero';
-      notifyListeners();
-
-      return;
-    }
-
-    if (_password.length < 12) {
-      _error = 'Password must be at least 12 characters';
+    if (problem != null) {
+      _error = problem;
       notifyListeners();
 
       return;
@@ -72,13 +62,13 @@ class RegisterViewModel extends ChangeNotifier {
     _successMessage = null;
     notifyListeners();
 
-    final res = await _session.register(
+    final Result<DriverSession> res = await _session.register(
       email: _email,
       name: _name,
       phone: _phone,
       password: _password,
       vehiclePlate: _vehiclePlate,
-      capacityKg: _capacityKg,
+      capacityKg: int.parse(_capacity),
     );
 
     res.fold(
@@ -99,5 +89,53 @@ class RegisterViewModel extends ChangeNotifier {
 
   void backToLogin() {
     _router.pop();
+  }
+
+  String? _problem() {
+    if (_email.isEmpty ||
+        _name.isEmpty ||
+        _phone.isEmpty ||
+        _password.isEmpty ||
+        _vehiclePlate.isEmpty ||
+        _capacity.isEmpty) {
+      return 'All fields are required';
+    }
+
+    if (!_email.contains('@')) {
+      return 'Enter a valid email address';
+    }
+
+    if (_name.length < minNameLength || _name.length > maxNameLength) {
+      return 'Enter your full name, $minNameLength to $maxNameLength '
+          'characters';
+    }
+
+    if (!_phonePattern.hasMatch(_phone)) {
+      return 'The phone number must be 8 to 15 digits, optionally after a +';
+    }
+
+    if (_vehiclePlate.length > maxPlateLength) {
+      return 'The vehicle plate can be at most $maxPlateLength characters';
+    }
+
+    final int? capacityKg = int.tryParse(_capacity);
+
+    if (capacityKg == null ||
+        capacityKg < minCapacityKg ||
+        capacityKg > maxCapacityKg) {
+      return 'Capacity must be a whole number of kilograms from '
+          '$minCapacityKg to $maxCapacityKg';
+    }
+
+    if (_password.length < minPasswordLength) {
+      return 'Password must be at least $minPasswordLength characters';
+    }
+
+    if (utf8.encode(_password).length > maxPasswordBytes) {
+      return 'Password must be at most $maxPasswordBytes bytes; accented '
+          'letters and emoji take more than one';
+    }
+
+    return null;
   }
 }

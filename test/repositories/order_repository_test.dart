@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart' show sha256;
 
+import 'package:dio/dio.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/order_repository_impl.dart';
@@ -117,16 +119,20 @@ void main() {
     ).called(1);
   });
 
-  final Uint8List photo = new Uint8List.fromList(utf8.encode('abc'));
-  const String photoSha256 =
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  final Uint8List photo = new Uint8List.fromList(<int>[
+    0xFF,
+    0xD8,
+    0xFF,
+    ...utf8.encode('abc'),
+  ]);
+  final String photoSha256 = sha256.convert(photo).toString();
 
   test(
     "attachPodPhoto asks for an address bound to the photo's SHA-256 and puts the bytes with the headers matching signed",
     () async {
       when(() => uploader.read(any())).thenAnswer((_) async => photo);
       when(() => channel.podUpload(any(), any())).thenAnswer(
-        (_) async => const ChannelReply('ok', <String, dynamic>{
+        (_) async => new ChannelReply('ok', <String, dynamic>{
           'upload_url':
               'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg?X-Amz-Signature=s',
           'upload_headers': <String, dynamic>{
@@ -246,5 +252,208 @@ void main() {
     );
 
     expect((res as Err<String>).failure, isA<PodPhotoFailure>());
+  });
+
+  test(
+    'a photo that is not a JPEG is refused before matching is asked',
+    () async {
+      when(
+        () => uploader.read(any()),
+      ).thenAnswer((_) async => new Uint8List.fromList(utf8.encode('PNG..')));
+
+      final Result<String> res = await sut.attachPodPhoto(
+        const OrderId(1),
+        '/tmp/photo.png',
+      );
+
+      expect((res as Err<String>).failure, isA<PodPhotoFailure>());
+      verifyNever(() => channel.podUpload(any(), any()));
+    },
+  );
+
+  test('a job taken off the courier clears it and names it', () async {
+    final Future<Order?> active = sut.watchActiveOrder().first;
+    final Future<OrderId> unassigned = sut.watchUnassigned().first;
+    await Future<void>.delayed(Duration.zero);
+
+    events.add(
+      const ChannelEvent('order_unassigned', <String, dynamic>{'id': 3}),
+    );
+
+    expect(await active, isNull);
+    expect(await unassigned, const OrderId(3));
+  });
+
+  test('a pending job is never read as an order', () async {
+    final List<Order?> seen = <Order?>[];
+    final StreamSubscription<Order?> sub = sut.watchActiveOrder().listen(
+      seen.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final Map<String, dynamic> pending = orderJson(4, 'pending')
+      ..['assigned_at'] = null;
+
+    events
+      ..add(new ChannelEvent('order_assigned', pending))
+      ..add(new ChannelEvent('order_updated', pending))
+      ..add(
+        new ChannelEvent('active_order', <String, dynamic>{'order': pending}),
+      )
+      ..add(new ChannelEvent('order_assigned', orderJson(5, 'assigned')));
+    await Future<void>.delayed(Duration.zero);
+    unawaited(sub.cancel());
+
+    expect(seen, hasLength(3));
+    expect(seen[0], isNull);
+    expect(seen[1], isNull);
+    expect(seen[2]!.id, const OrderId(5));
+  });
+
+  test('a job this app cannot read does not end the stream', () async {
+    final List<Order?> seen = <Order?>[];
+    final StreamSubscription<Order?> sub = sut.watchActiveOrder().listen(
+      seen.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    events
+      ..add(
+        const ChannelEvent('order_assigned', <String, dynamic>{
+          'id': 'seven',
+          'assigned_at': '2026-01-01T00:00:00Z',
+        }),
+      )
+      ..add(new ChannelEvent('order_assigned', orderJson(5, 'assigned')));
+    await Future<void>.delayed(Duration.zero);
+    unawaited(sub.cancel());
+
+    expect(seen.single!.id, const OrderId(5));
+  });
+
+  test('a pickup whose reply was lost is retried, and its ok is success', () {
+    fakeAsync((FakeAsync async) {
+      int calls = 0;
+      when(() => channel.pickup(any())).thenAnswer((_) async {
+        calls++;
+
+        if (calls == 1) {
+          throw const ChannelException('push "pickup" timed out');
+        }
+
+        return const ChannelReply('ok', <String, dynamic>{});
+      });
+      Result<Unit>? res;
+
+      sut.pickup(const OrderId(1)).then((Result<Unit> r) => res = r).ignore();
+      async
+        ..flushMicrotasks()
+        ..elapse(const Duration(seconds: 1));
+
+      expect(res, isA<Ok<Unit>>());
+      expect(calls, 2);
+    });
+  });
+
+  test('a delivery whose reply was lost is retried, and its ok is success', () {
+    fakeAsync((FakeAsync async) {
+      int calls = 0;
+      when(
+        () => channel.delivered(
+          any(),
+          podPhotoUrl: any(named: 'podPhotoUrl'),
+          podSignature: any(named: 'podSignature'),
+        ),
+      ).thenAnswer((_) async {
+        calls++;
+
+        if (calls == 1) {
+          throw const ChannelException('push "delivered" timed out');
+        }
+
+        return const ChannelReply('ok', <String, dynamic>{});
+      });
+      Result<Unit>? res;
+
+      sut
+          .delivered(
+            const OrderId(1),
+            podPhotoUrl: 'https://storage.test/p.jpg',
+            podSignature: 'data:image/png;base64,AAAA',
+          )
+          .then((Result<Unit> r) => res = r)
+          .ignore();
+      async
+        ..flushMicrotasks()
+        ..elapse(const Duration(seconds: 1));
+
+      expect(res, isA<Ok<Unit>>());
+      expect(calls, 2);
+    });
+  });
+
+  test('a delivery whose proof could not be checked yet is retried', () {
+    fakeAsync((FakeAsync async) {
+      int calls = 0;
+      when(
+        () => channel.delivered(
+          any(),
+          podPhotoUrl: any(named: 'podPhotoUrl'),
+          podSignature: any(named: 'podSignature'),
+        ),
+      ).thenAnswer((_) async {
+        calls++;
+
+        return calls == 1
+            ? const ChannelReply('error', <String, dynamic>{
+                'reason': 'proof_unverifiable',
+              })
+            : const ChannelReply('ok', <String, dynamic>{});
+      });
+      Result<Unit>? res;
+
+      sut
+          .delivered(
+            const OrderId(1),
+            podPhotoUrl: 'https://storage.test/p.jpg',
+            podSignature: 'data:image/png;base64,AAAA',
+          )
+          .then((Result<Unit> r) => res = r)
+          .ignore();
+      async
+        ..flushMicrotasks()
+        ..elapse(const Duration(seconds: 1));
+
+      expect(res, isA<Ok<Unit>>());
+    });
+  });
+
+  test('a delivery refused for a missing signature is not retried', () async {
+    when(
+      () => channel.delivered(
+        any(),
+        podPhotoUrl: any(named: 'podPhotoUrl'),
+        podSignature: any(named: 'podSignature'),
+      ),
+    ).thenAnswer(
+      (_) async => const ChannelReply('error', <String, dynamic>{
+        'reason': 'signature_required',
+      }),
+    );
+
+    final Result<Unit> res = await sut.delivered(
+      const OrderId(1),
+      podPhotoUrl: 'https://storage.test/p.jpg',
+      podSignature: '',
+    );
+
+    final Failure failure = (res as Err<Unit>).failure;
+    expect(failure.message, contains('signature'));
+    verify(
+      () => channel.delivered(
+        any(),
+        podPhotoUrl: any(named: 'podPhotoUrl'),
+        podSignature: any(named: 'podSignature'),
+      ),
+    ).called(1);
   });
 }

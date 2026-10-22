@@ -16,8 +16,6 @@ class _MockVm extends Mock implements LoginViewModel {
   bool get hasListeners => false;
 }
 
-
-
 Future<void> _pump(WidgetTester tester, LoginViewModel vm) {
   return tester.pumpWidget(
     MaterialApp(
@@ -30,13 +28,14 @@ Future<void> _pump(WidgetTester tester, LoginViewModel vm) {
   );
 }
 
-
 void main() {
   late _MockVm vm;
 
   setUp(() {
     vm = new _MockVm();
     when(() => vm.submit()).thenAnswer((_) async {});
+    when(() => vm.submitCode()).thenAnswer((_) async {});
+    when(() => vm.awaitingCode).thenReturn(false);
   });
 
   testWidgets('renders fields and submits', (WidgetTester tester) async {
@@ -64,5 +63,21 @@ void main() {
     when(() => vm.error).thenReturn('invalid_credentials');
     await _pump(tester, vm);
     expect(find.text('invalid_credentials'), findsOneWidget);
+  });
+
+  testWidgets('a second factor asks for the code and verifies it', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.error).thenReturn(null);
+    when(() => vm.awaitingCode).thenReturn(true);
+    await _pump(tester, vm);
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Authentication code'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+
+    verify(() => vm.submitCode()).called(1);
+    verifyNever(() => vm.submit());
   });
 }

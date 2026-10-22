@@ -18,8 +18,6 @@ class _MockVm extends Mock implements TrackingViewModel {
   bool get hasListeners => false;
 }
 
-
-
 Future<void> _pump(WidgetTester tester, TrackingViewModel vm) {
   return tester.pumpWidget(
     MaterialApp(
@@ -31,7 +29,6 @@ Future<void> _pump(WidgetTester tester, TrackingViewModel vm) {
     ),
   );
 }
-
 
 void main() {
   late _MockVm vm;

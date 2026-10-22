@@ -26,7 +26,9 @@ class PendingApprovalScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              "You'll be able to log in once an admin approves it.",
+              'This courier account is not approved to drive, or its approval '
+              'was withdrawn. You can go on duty once an administrator '
+              'approves it.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),

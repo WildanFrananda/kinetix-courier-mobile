@@ -1,4 +1,5 @@
 import 'package:fleet_pulse_mobile/core/failure.dart';
+import 'package:fleet_pulse_mobile/models/driver_availability.dart';
 import 'package:fleet_pulse_mobile/models/enums.dart';
 import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
 
@@ -18,7 +19,7 @@ class TrackingOnline extends TrackingState {
   const TrackingOnline({
     required this.connection,
     required this.onDuty,
-    this.busy = false,
+    this.availability = DriverAvailability.offline,
     this.permissionBlocked = false,
     this.lastPing,
     this.lastMessage,
@@ -26,7 +27,7 @@ class TrackingOnline extends TrackingState {
 
   final ConnectionStatus connection;
   final bool onDuty;
-  final bool busy;
+  final DriverAvailability availability;
   final bool permissionBlocked;
   final TelemetryPing? lastPing;
   final String? lastMessage;

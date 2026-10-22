@@ -1,0 +1,4 @@
+{
+  "HTTP_BASE": "https://localhost:8443",
+  "WS_BASE": "wss://localhost:8443"
+}
