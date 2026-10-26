@@ -1,6 +1,7 @@
 export 'authenticated_account.dart';
 export 'converters.dart';
 export 'courier_registration_response.dart';
+export 'delivery_proof_draft.dart';
 export 'driver_availability.dart';
 export 'driver_profile.dart';
 export 'driver_profile_envelope.dart';

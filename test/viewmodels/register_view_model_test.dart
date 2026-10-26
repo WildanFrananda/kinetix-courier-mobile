@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:fleet_pulse_mobile/core/failure.dart';
 import 'package:fleet_pulse_mobile/core/result.dart';
 import 'package:fleet_pulse_mobile/models/ids.dart';
@@ -225,4 +228,49 @@ void main() {
       expect(sut.error, advice);
     },
   );
+
+  test(
+    'a delayed resume says how long to wait and holds the submit until then',
+    () {
+      fakeAsync((FakeAsync async) {
+        stubRegister(
+          const Err<DriverSession>(SignInDelayedFailure(Duration(seconds: 2))),
+        );
+        fill(sut);
+        unawaited(sut.submit());
+        async.flushMicrotasks();
+
+        expect(sut.delayed, isTrue);
+        expect(sut.error, 'Too many sign-in attempts. Try again in 2 seconds.');
+
+        unawaited(sut.submit());
+        async.flushMicrotasks();
+        verify(
+          () => session.register(
+            email: any(named: 'email'),
+            name: any(named: 'name'),
+            phone: any(named: 'phone'),
+            password: any(named: 'password'),
+            vehiclePlate: any(named: 'vehiclePlate'),
+            capacityKg: any(named: 'capacityKg'),
+          ),
+        ).called(1);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(sut.delayed, isFalse);
+        expect(sut.error, isNull);
+
+        sut.dispose();
+      });
+    },
+  );
+
+  test('an app identity does not accept asks for an update', () async {
+    stubRegister(const Err<DriverSession>(AppUpdateRequiredFailure()));
+    fill(sut);
+
+    await sut.submit();
+
+    expect(router.stack.single, isA<UpdateRequiredRoute>());
+  });
 }

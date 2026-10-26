@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$DriverSession {
 
-@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId get driverId; String get token;@JsonKey(name: 'refresh_token') String get refreshToken;
+@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId? get driverId; String get token;@JsonKey(name: 'refresh_token') String get refreshToken;
 /// Create a copy of DriverSession
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -48,7 +48,7 @@ abstract mixin class $DriverSessionCopyWith<$Res>  {
   factory $DriverSessionCopyWith(DriverSession value, $Res Function(DriverSession) _then) = _$DriverSessionCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId driverId, String token,@JsonKey(name: 'refresh_token') String refreshToken
+@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId? driverId, String token,@JsonKey(name: 'refresh_token') String refreshToken
 });
 
 
@@ -65,10 +65,10 @@ class _$DriverSessionCopyWithImpl<$Res>
 
 /// Create a copy of DriverSession
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? driverId = null,Object? token = null,Object? refreshToken = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? driverId = freezed,Object? token = null,Object? refreshToken = null,}) {
   return _then(_self.copyWith(
-driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as DriverId,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
+driverId: freezed == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
+as DriverId?,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
 as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
 as String,
   ));
@@ -155,7 +155,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId? driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _DriverSession() when $default != null:
 return $default(_that.driverId,_that.token,_that.refreshToken);case _:
@@ -176,7 +176,7 @@ return $default(_that.driverId,_that.token,_that.refreshToken);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId? driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)  $default,) {final _that = this;
 switch (_that) {
 case _DriverSession():
 return $default(_that.driverId,_that.token,_that.refreshToken);case _:
@@ -196,7 +196,7 @@ return $default(_that.driverId,_that.token,_that.refreshToken);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'driver_id')@DriverIdConverter()  DriverId? driverId,  String token, @JsonKey(name: 'refresh_token')  String refreshToken)?  $default,) {final _that = this;
 switch (_that) {
 case _DriverSession() when $default != null:
 return $default(_that.driverId,_that.token,_that.refreshToken);case _:
@@ -214,7 +214,7 @@ class _DriverSession implements DriverSession {
   const _DriverSession({@JsonKey(name: 'driver_id')@DriverIdConverter() required this.driverId, required this.token, @JsonKey(name: 'refresh_token') required this.refreshToken});
   factory _DriverSession.fromJson(Map<String, dynamic> json) => _$DriverSessionFromJson(json);
 
-@override@JsonKey(name: 'driver_id')@DriverIdConverter() final  DriverId driverId;
+@override@JsonKey(name: 'driver_id')@DriverIdConverter() final  DriverId? driverId;
 @override final  String token;
 @override@JsonKey(name: 'refresh_token') final  String refreshToken;
 
@@ -251,7 +251,7 @@ abstract mixin class _$DriverSessionCopyWith<$Res> implements $DriverSessionCopy
   factory _$DriverSessionCopyWith(_DriverSession value, $Res Function(_DriverSession) _then) = __$DriverSessionCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId driverId, String token,@JsonKey(name: 'refresh_token') String refreshToken
+@JsonKey(name: 'driver_id')@DriverIdConverter() DriverId? driverId, String token,@JsonKey(name: 'refresh_token') String refreshToken
 });
 
 
@@ -268,10 +268,10 @@ class __$DriverSessionCopyWithImpl<$Res>
 
 /// Create a copy of DriverSession
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? driverId = null,Object? token = null,Object? refreshToken = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? driverId = freezed,Object? token = null,Object? refreshToken = null,}) {
   return _then(_DriverSession(
-driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as DriverId,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
+driverId: freezed == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
+as DriverId?,token: null == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
 as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
 as String,
   ));

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:clock/clock.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
@@ -100,12 +103,111 @@ void main() {
     expect(sut.error, contains('vehicle'));
   });
 
+  group('a sign-in identity delays', () {
+    test(
+      'says how long to wait, counts down, and holds the submit until then',
+      () {
+        fakeAsync((FakeAsync async) {
+          logsIn(
+            const Err<LoginOutcome>(SignInDelayedFailure(Duration(seconds: 8))),
+          );
+          unawaited(submitCredentials());
+          async.flushMicrotasks();
+
+          expect(sut.delayed, isTrue);
+          expect(
+            sut.error,
+            'Too many sign-in attempts. Try again in 8 seconds.',
+          );
+
+          async.elapse(const Duration(seconds: 3));
+          expect(
+            sut.error,
+            'Too many sign-in attempts. Try again in 5 seconds.',
+          );
+
+          unawaited(sut.submit());
+          async.flushMicrotasks();
+          verify(
+            () => session.login(
+              email: any(named: 'email'),
+              password: any(named: 'password'),
+            ),
+          ).called(1);
+
+          async.elapse(const Duration(seconds: 5));
+          expect(sut.delayed, isFalse);
+          expect(sut.error, isNull);
+          expect(router.stack.single, isA<SplashRoute>());
+
+          sut.dispose();
+        });
+      },
+    );
+
+    test('keeps the code step: identity counted no attempt', () {
+      fakeAsync((FakeAsync async) {
+        logsIn(const Ok<LoginOutcome>(SecondFactorRequired(challenge)));
+        verifiesTo(
+          const Err<DriverSession>(SignInDelayedFailure(Duration(seconds: 2))),
+        );
+        unawaited(submitCredentials());
+        async.flushMicrotasks();
+
+        sut.setCode('123456');
+        unawaited(sut.submitCode());
+        async.flushMicrotasks();
+
+        expect(sut.awaitingCode, isTrue);
+        expect(sut.delayed, isTrue);
+        expect(sut.submitting, isFalse);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(sut.delayed, isFalse);
+
+        sut.dispose();
+      });
+    });
+
+    test('stops counting once the screen is gone', () {
+      fakeAsync((FakeAsync async) {
+        logsIn(
+          const Err<LoginOutcome>(SignInDelayedFailure(Duration(seconds: 60))),
+        );
+        unawaited(submitCredentials());
+        async.flushMicrotasks();
+
+        sut.dispose();
+
+        expect(async.periodicTimerCount, 0);
+      });
+    });
+  });
+
+  test('an administrator is told plainly, and stays signed out', () async {
+    logsIn(const Err<LoginOutcome>(AdminAccountFailure()));
+
+    await submitCredentials();
+
+    expect(sut.error, contains('administrator'));
+    expect(sut.awaitingCode, isFalse);
+    expect(router.stack.single, isA<SplashRoute>());
+  });
+
+  test('an app identity does not accept asks for an update', () async {
+    logsIn(const Err<LoginOutcome>(AppUpdateRequiredFailure()));
+
+    await submitCredentials();
+
+    expect(router.stack.single, isA<UpdateRequiredRoute>());
+  });
+
   test('pending approval routes to PendingApprovalRoute', () async {
     logsIn(const Err<LoginOutcome>(PendingApprovalFailure()));
 
     await submitCredentials();
 
-    expect(router.stack.last, isA<PendingApprovalRoute>());
+    expect(router.stack.single, isA<PendingApprovalRoute>());
   });
 
   group('an account with a second factor', () {
@@ -183,6 +285,54 @@ void main() {
           code: any(named: 'code'),
         ),
       );
+    });
+
+    test(
+      'an accepted code whose answer was unreadable goes back to the password',
+      () async {
+        logsIn(const Ok<LoginOutcome>(SecondFactorRequired(challenge)));
+        verifiesTo(
+          const Err<DriverSession>(UnreadableAnswerFailure('Sign in again.')),
+        );
+        await submitCredentials();
+
+        sut.setCode('123456');
+        await sut.submitCode();
+
+        expect(sut.awaitingCode, isFalse);
+        expect(sut.error, 'Sign in again.');
+      },
+    );
+
+    test(
+      'a challenge with no attempts left goes back to the password, and says why',
+      () async {
+        logsIn(const Ok<LoginOutcome>(SecondFactorRequired(challenge)));
+        verifiesTo(
+          const Err<DriverSession>(
+            ChallengeSpentFailure('Too many wrong codes. Sign in again.'),
+          ),
+        );
+        await submitCredentials();
+
+        sut.setCode('000000');
+        await sut.submitCode();
+
+        expect(sut.awaitingCode, isFalse);
+        expect(sut.error, 'Too many wrong codes. Sign in again.');
+        expect(sut.submitting, isFalse);
+      },
+    );
+
+    test('an app identity does not accept asks for an update', () async {
+      logsIn(const Ok<LoginOutcome>(SecondFactorRequired(challenge)));
+      verifiesTo(const Err<DriverSession>(AppUpdateRequiredFailure()));
+      await submitCredentials();
+
+      sut.setCode('123456');
+      await sut.submitCode();
+
+      expect(router.stack.single, isA<UpdateRequiredRoute>());
     });
 
     test('signing in again leaves the code step', () async {

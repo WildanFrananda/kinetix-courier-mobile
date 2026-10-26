@@ -35,6 +35,9 @@ class SplashViewModel extends ChangeNotifier {
           when failure is PendingApprovalFailure:
         _router.replaceAll(const PendingApprovalRoute());
       case Err<DriverProfile>(:final Failure failure)
+          when failure is AppUpdateRequiredFailure:
+        _router.replaceAll(const UpdateRequiredRoute());
+      case Err<DriverProfile>(:final Failure failure)
           when failure is AuthFailure ||
               failure is RegistrationIncompleteFailure:
         await _session.logout();

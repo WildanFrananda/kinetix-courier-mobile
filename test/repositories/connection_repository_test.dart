@@ -6,6 +6,7 @@ import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository_impl.dart';
 import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
 import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
+import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
 import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,10 +18,13 @@ class _MockRenewer extends Mock implements SessionRenewer {}
 
 class _MockFleet extends Mock implements FleetStanding {}
 
+class _MockStore extends Mock implements TokenStore {}
+
 void main() {
   late _MockChannel channel;
   late _MockRenewer renewer;
   late _MockFleet fleet;
+  late _MockStore store;
   late StreamController<void> refusals;
   late StreamController<void> notApproved;
   late StreamController<ConnectionStatus> statuses;
@@ -52,6 +56,7 @@ void main() {
         refreshToken: 'refresh-token',
       ),
     );
+    registerFallbackValue(const DriverId(0));
   });
 
   void build() {
@@ -61,13 +66,15 @@ void main() {
     when(() => channel.refused).thenAnswer((_) => refusals.stream);
     when(() => channel.notApproved).thenAnswer((_) => notApproved.stream);
     when(() => channel.statusStream).thenAnswer((_) => statuses.stream);
-    sut = new ConnectionRepositoryImpl(channel, renewer, fleet);
+    sut = new ConnectionRepositoryImpl(channel, renewer, fleet, store);
   }
 
   setUp(() {
     channel = new _MockChannel();
     renewer = new _MockRenewer();
     fleet = new _MockFleet();
+    store = new _MockStore();
+    when(() => store.rebind(any())).thenAnswer((_) async {});
     when(
       () => channel.connect(any(), wsBase: any(named: 'wsBase')),
     ).thenAnswer((_) async {});
@@ -132,6 +139,30 @@ void main() {
         );
       });
     });
+
+    test(
+      'an app identity no longer accepts asks for an update and stops trying',
+      () {
+        fakeAsync((FakeAsync async) {
+          build();
+          renewsTo(const Err<DriverSession>(AppUpdateRequiredFailure()));
+          final List<SessionEnd> ended = <SessionEnd>[];
+          sut.sessionEnded.listen(ended.add);
+
+          unawaited(sut.connect(signedIn));
+          refusals.add(null);
+          async
+            ..flushMicrotasks()
+            ..elapse(const Duration(minutes: 5));
+
+          expect(ended.single, isA<SessionUpdateRequired>());
+          verify(() => renewer.renew()).called(1);
+          verify(
+            () => channel.connect(any(), wsBase: any(named: 'wsBase')),
+          ).called(1);
+        });
+      },
+    );
 
     test('waits and tries again while identity cannot be reached', () {
       fakeAsync((FakeAsync async) {
@@ -277,6 +308,44 @@ void main() {
 
           expect(ended, isEmpty);
           verify(() => renewer.renew()).called(1);
+        });
+      },
+    );
+
+    test(
+      'again right after a renewal, with the fleet naming another driver, rejoins as that driver at once',
+      () {
+        fakeAsync((FakeAsync async) {
+          build();
+          renewsTo(const Ok<DriverSession>(renewed));
+          standsAs(
+            const Ok<DriverProfile>(
+              DriverProfile(
+                id: DriverId(4),
+                vehiclePlate: 'B 1 ABC',
+                capacityKg: 100,
+                status: 'offline',
+                active: true,
+              ),
+            ),
+          );
+          final List<SessionEnd> ended = <SessionEnd>[];
+          sut.sessionEnded.listen(ended.add);
+
+          unawaited(sut.connect(signedIn));
+          refusals.add(null);
+          async.flushMicrotasks();
+          refusals.add(null);
+          async.flushMicrotasks();
+
+          verify(() => store.rebind(const DriverId(4))).called(1);
+          verify(
+            () => channel.connect(
+              renewed.copyWith(driverId: const DriverId(4)),
+              wsBase: any(named: 'wsBase'),
+            ),
+          ).called(1);
+          expect(ended, isEmpty);
         });
       },
     );

@@ -6,7 +6,8 @@ import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/duty_repository_impl.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
 import 'package:fleet_pulse_mobile/services/location/location_service.dart';
 import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,41 +18,56 @@ class _MockLocation extends Mock implements LocationService {}
 
 class _MockChannel extends Mock implements ChannelClient {}
 
+const DriverId _courier = DriverId(1);
+
 class _MemoryStore implements OfflinePositionStore {
-  final SplayTreeMap<int, TelemetryPing> entries =
-      new SplayTreeMap<int, TelemetryPing>();
+  final Map<DriverId, SplayTreeMap<int, TelemetryPing>> owners =
+      <DriverId, SplayTreeMap<int, TelemetryPing>>{};
+
+  SplayTreeMap<int, TelemetryPing> get entries => of(_courier);
+
+  SplayTreeMap<int, TelemetryPing> of(DriverId owner) =>
+      owners.putIfAbsent(owner, SplayTreeMap<int, TelemetryPing>.new);
 
   @override
   int get capacity => OfflinePositionStore.defaultCapacity;
 
   @override
-  Future<int> count() async => entries.length;
+  Future<int> count() async => owners.values.fold<int>(
+    0,
+    (int total, SplayTreeMap<int, TelemetryPing> kept) => total + kept.length,
+  );
 
   @override
-  Future<void> add(TelemetryPing ping) async {
-    entries[ping.recordedAt.microsecondsSinceEpoch] = ping;
+  Future<void> add(DriverId owner, TelemetryPing ping) async {
+    of(owner)[ping.recordedAt.microsecondsSinceEpoch] = ping;
   }
 
   @override
-  Future<List<TelemetryPing>> oldest(int limit) async =>
-      entries.values.take(limit).toList();
+  Future<List<TelemetryPing>> oldest(DriverId owner, int limit) async =>
+      of(owner).values.take(limit).toList();
 
   @override
-  Future<void> remove(Iterable<TelemetryPing> pings) async {
+  Future<void> remove(DriverId owner, Iterable<TelemetryPing> pings) async {
     for (final TelemetryPing ping in pings) {
-      entries.remove(ping.recordedAt.microsecondsSinceEpoch);
+      of(owner).remove(ping.recordedAt.microsecondsSinceEpoch);
     }
   }
 
   @override
   Future<int> discardRecordedBefore(DateTime cutoff) async {
-    final int before = entries.length;
+    int discarded = 0;
 
-    entries.removeWhere(
-      (int key, TelemetryPing _) => key < cutoff.microsecondsSinceEpoch,
-    );
+    for (final SplayTreeMap<int, TelemetryPing> kept in owners.values) {
+      final int before = kept.length;
 
-    return before - entries.length;
+      kept.removeWhere(
+        (int key, TelemetryPing _) => key < cutoff.microsecondsSinceEpoch,
+      );
+      discarded += before - kept.length;
+    }
+
+    return discarded;
   }
 }
 
@@ -103,6 +119,7 @@ void main() {
       new TelemetryPing(latitude: 0, longitude: 0, recordedAt: _fixTime),
     );
     registerFallbackValue(<TelemetryPing>[]);
+    registerFallbackValue(_courier);
   });
 
   setUp(() {
@@ -123,13 +140,14 @@ void main() {
     when(() => channel.statusStream).thenAnswer((_) => connection.stream);
     when(() => channel.status).thenAnswer((_) => connected);
     when(() => channel.joinStatus).thenReturn('offline');
+    when(() => channel.driverId).thenReturn(_courier);
     when(() => channel.setStatus(any())).thenAnswer(
       (Invocation i) async => _status(i.positionalArguments.first as String),
     );
     when(() => channel.ping(any())).thenAnswer((_) async => _ok);
-    when(() => channel.pingBatch(any())).thenAnswer(
+    when(() => channel.pingBatch(any(), any())).thenAnswer(
       (Invocation i) async =>
-          _settled((i.positionalArguments.first as List<TelemetryPing>).length),
+          _settled((i.positionalArguments[1] as List<TelemetryPing>).length),
     );
   });
 
@@ -390,6 +408,39 @@ void main() {
     });
   });
 
+  test('a fix taken during a rate-limited pause is kept for the batch', () {
+    inFakeTime((FakeAsync async) {
+      build();
+      sut.goOnDuty().ignore();
+      async.flushMicrotasks();
+      when(
+        () => channel.ping(any()),
+      ).thenAnswer((_) async => _refusal('rate_limited'));
+      positions.add(_pos(-6.20, 106.80));
+      async.flushMicrotasks();
+      when(() => channel.ping(any())).thenAnswer((_) async => _ok);
+
+      final DateTime paused = _fixTime.add(const Duration(seconds: 4));
+      positions.add(_pos(-6.30, 106.90, at: paused));
+      async
+        ..flushMicrotasks()
+        ..elapse(DutyRepositoryImpl.cadence);
+
+      expect(offline.entries.values.single.recordedAt, paused);
+    });
+  });
+
+  test('going on duty with no courier on the socket is refused', () async {
+    when(() => channel.driverId).thenReturn(null);
+    build();
+
+    final Result<DriverAvailability> res = await sut.goOnDuty();
+
+    expect((res as Err<DriverAvailability>).failure, isA<NetworkFailure>());
+    expect(sut.onDuty, isFalse);
+    verifyNever(() => location.positions());
+  });
+
   test('a fix refused as invalid is reported and not sent again', () {
     inFakeTime((FakeAsync async) {
       build();
@@ -439,7 +490,7 @@ void main() {
         expect(live, hasLength(1));
         expect(live.single.recordedAt, later);
         final List<TelemetryPing> batch =
-            verify(() => channel.pingBatch(captureAny())).captured.single
+            verify(() => channel.pingBatch(any(), captureAny())).captured.single
                 as List<TelemetryPing>;
         expect(batch.single.recordedAt, _fixTime);
         expect(offline.entries, isEmpty);
@@ -501,7 +552,7 @@ void main() {
     }
 
     List<List<TelemetryPing>> batchesSent() => verify(
-      () => channel.pingBatch(captureAny()),
+      () => channel.pingBatch(any(), captureAny()),
     ).captured.cast<List<TelemetryPing>>();
 
     List<int> secondsOf(List<TelemetryPing> batch) => <int>[
@@ -540,7 +591,7 @@ void main() {
 
         expect(offline.entries, hasLength(2));
         verifyNever(() => channel.ping(any()));
-        verifyNever(() => channel.pingBatch(any()));
+        verifyNever(() => channel.pingBatch(any(), any()));
       });
     });
 
@@ -560,7 +611,7 @@ void main() {
 
             return _ok;
           });
-          when(() => channel.pingBatch(any())).thenAnswer((_) async {
+          when(() => channel.pingBatch(any(), any())).thenAnswer((_) async {
             order.add('ping_batch');
 
             return _settled(3);
@@ -581,7 +632,7 @@ void main() {
         keep(<int>[for (int i = 0; i < 250; i++) i]);
         final List<Completer<ChannelReply>> replies =
             <Completer<ChannelReply>>[];
-        when(() => channel.pingBatch(any())).thenAnswer((_) {
+        when(() => channel.pingBatch(any(), any())).thenAnswer((_) {
           final Completer<ChannelReply> reply = new Completer<ChannelReply>();
           replies.add(reply);
 
@@ -624,7 +675,7 @@ void main() {
     test('an ok reply settles the whole batch, refused entries included', () {
       inFakeTime((FakeAsync async) {
         keep(<int>[0, 10, 20]);
-        when(() => channel.pingBatch(any())).thenAnswer(
+        when(() => channel.pingBatch(any(), any())).thenAnswer(
           (_) async => const ChannelReply('ok', <String, dynamic>{
             'stored': <int>[0],
             'duplicates': <int>[1],
@@ -648,7 +699,7 @@ void main() {
         inFakeTime((FakeAsync async) {
           keep(<int>[0, 10]);
           int calls = 0;
-          when(() => channel.pingBatch(any())).thenAnswer((_) async {
+          when(() => channel.pingBatch(any(), any())).thenAnswer((_) async {
             calls++;
 
             return calls == 1 ? _refusal('unavailable') : _settled(2);
@@ -678,7 +729,7 @@ void main() {
       inFakeTime((FakeAsync async) {
         keep(<int>[0]);
         int calls = 0;
-        when(() => channel.pingBatch(any())).thenAnswer((_) async {
+        when(() => channel.pingBatch(any(), any())).thenAnswer((_) async {
           calls++;
 
           return calls == 1 ? _refusal('rate_limited') : _settled(1);
@@ -732,6 +783,62 @@ void main() {
 
         expect(batchesSent(), hasLength(1));
         expect(offline.entries, isEmpty);
+      });
+    });
+
+    test(
+      'refused entries are settled with the batch, and a clock ahead is told to the courier',
+      () {
+        inFakeTime((FakeAsync async) {
+          keep(<int>[0, 10, 20]);
+          final List<Failure> problems = <Failure>[];
+          when(() => channel.pingBatch(any(), any())).thenAnswer(
+            (_) async => const ChannelReply('ok', <String, dynamic>{
+              'stored': <int>[0],
+              'duplicates': <int>[],
+              'refused': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'index': 1,
+                  'reason': 'ahead_of_server_clock',
+                },
+                <String, dynamic>{'index': 2, 'reason': 'too_old'},
+              ],
+            }),
+          );
+          build();
+          sut.problems.listen(problems.add);
+
+          connection.add(ConnectionStatus.connected);
+          async.flushMicrotasks();
+
+          expect(offline.entries, isEmpty);
+          expect(
+            (problems.single as ChannelFailure).reason,
+            'ahead_of_server_clock',
+          );
+        });
+      },
+    );
+
+    test('only the positions of the courier on the socket are sent', () {
+      inFakeTime((FakeAsync async) {
+        final TelemetryPing theirs = queuedAt(5);
+        offline.of(
+          const DriverId(2),
+        )[theirs.recordedAt.microsecondsSinceEpoch] = theirs;
+        keep(<int>[0]);
+        build();
+
+        connection.add(ConnectionStatus.connected);
+        async.flushMicrotasks();
+
+        final List<dynamic> sent = verify(
+          () => channel.pingBatch(captureAny(), captureAny()),
+        ).captured;
+
+        expect(sent[0], _courier);
+        expect(secondsOf(sent[1] as List<TelemetryPing>), <int>[0]);
+        expect(offline.of(const DriverId(2)), hasLength(1));
       });
     });
 

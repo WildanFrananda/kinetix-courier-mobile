@@ -6,11 +6,15 @@ import 'package:fleet_pulse_mobile/config/app_config.dart';
 import 'package:fleet_pulse_mobile/core/app_logger.dart';
 import 'package:fleet_pulse_mobile/models/driver_session.dart';
 import 'package:fleet_pulse_mobile/models/enums.dart';
+import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
 import 'package:fleet_pulse_mobile/services/channel/handshake_refused_exception.dart';
 import 'package:fleet_pulse_mobile/services/channel/join_refused_exception.dart';
+import 'package:fleet_pulse_mobile/services/channel/push_timeout_exception.dart';
 import 'package:fleet_pulse_mobile/services/channel/ws_channel_socket.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:injectable/injectable.dart';
@@ -24,6 +28,11 @@ class ChannelClient {
 
   @visibleForTesting
   ChannelClient.withConnector(this._connect);
+
+  static const Duration heartbeatInterval = Duration(seconds: 30);
+  static const Duration heartbeatTimeout = Duration(seconds: 10);
+  static const Duration pushTimeout = Duration(seconds: 5);
+  static const Duration joinTimeout = Duration(seconds: 10);
 
   static const String _tokenProtocolPrefix = 'base64url.bearer.phx.';
   static const String _notApprovedReason = 'pending_approval';
@@ -61,6 +70,7 @@ class ChannelClient {
   String? _joinRef;
   String? _joinStatus;
   int _backoffAttempt = 0;
+  bool _probing = false;
   ConnectionStatus _status = ConnectionStatus.disconnected;
 
   Stream<ChannelEvent> get events => _events.stream;
@@ -69,8 +79,9 @@ class ChannelClient {
   Stream<void> get notApproved => _notApprovedCtrl.stream;
   ConnectionStatus get status => _status;
   String? get joinStatus => _joinStatus;
+  DriverId? get driverId => _session?.driverId;
 
-  String get _topic => 'driver:${_session!.driverId.value}';
+  String get _topic => 'driver:${_session?.driverId?.value}';
 
   @visibleForTesting
   static Uri socketUri(String wsBase) => Uri.parse(wsBase).replace(
@@ -105,12 +116,19 @@ class ChannelClient {
 
   Future<ChannelReply> ping(TelemetryPing p) => push('ping', _position(p));
 
-  Future<ChannelReply> pingBatch(List<TelemetryPing> pings) =>
-      push('ping_batch', <String, dynamic>{
-        'pings': <Map<String, dynamic>>[
-          for (final TelemetryPing p in pings) _position(p),
-        ],
-      });
+  Future<ChannelReply> pingBatch(DriverId owner, List<TelemetryPing> pings) {
+    if (_session?.driverId != owner) {
+      return Future<ChannelReply>.error(
+        const ChannelException('the socket belongs to another courier'),
+      );
+    }
+
+    return push('ping_batch', <String, dynamic>{
+      'pings': <Map<String, dynamic>>[
+        for (final TelemetryPing p in pings) _position(p),
+      ],
+    });
+  }
 
   Future<ChannelReply> setStatus(String status) =>
       push('status', <String, dynamic>{'status': status});
@@ -152,10 +170,11 @@ class ChannelClient {
     socket.add(jsonEncode(<dynamic>[_joinRef, ref, _topic, event, payload]));
 
     return completer.future.timeout(
-      const Duration(seconds: 5),
+      pushTimeout,
       onTimeout: () {
         _pending.remove(ref);
-        throw new ChannelException('push "$event" timed out');
+        _probe();
+        throw new PushTimeoutException(event);
       },
     );
   }
@@ -187,6 +206,15 @@ class ChannelClient {
       return;
     }
 
+    final DriverId? driver = session.driverId;
+
+    if (driver == null) {
+      AppLogger.debug('no driver is known for this session yet');
+      _refuse(_notApprovedCtrl);
+
+      return;
+    }
+
     _setStatus(ConnectionStatus.connecting);
 
     try {
@@ -210,7 +238,7 @@ class ChannelClient {
         onError: (Object _, _) => _onClosed(),
         cancelOnError: true,
       );
-      await _join(session);
+      await _join(driver);
       _backoffAttempt = 0;
       _setStatus(ConnectionStatus.connected);
       _startHeartbeat();
@@ -241,7 +269,7 @@ class ChannelClient {
     }
   }
 
-  Future<void> _join(DriverSession session) async {
+  Future<void> _join(DriverId driver) async {
     final String joinRef = (++_ref).toString();
     final Completer<ChannelReply> completer = new Completer<ChannelReply>();
 
@@ -252,15 +280,13 @@ class ChannelClient {
       jsonEncode(<dynamic>[
         joinRef,
         joinRef,
-        'driver:${session.driverId.value}',
+        'driver:${driver.value}',
         'phx_join',
         <String, dynamic>{},
       ]),
     );
 
-    final ChannelReply reply = await completer.future.timeout(
-      const Duration(seconds: 10),
-    );
+    final ChannelReply reply = await completer.future.timeout(joinTimeout);
 
     if (!reply.isOk) {
       throw new JoinRefusedException(reply.reason ?? reply.status);
@@ -335,25 +361,49 @@ class ChannelClient {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = new Timer.periodic(const Duration(seconds: 30), (_) {
-      final ChannelSocket? socket = _socket;
+    _heartbeatTimer = new Timer.periodic(heartbeatInterval, (_) => _probe());
+  }
 
-      if (socket == null) {
-        return;
-      }
+  void _probe() {
+    final ChannelSocket? socket = _socket;
 
-      final String ref = (++_ref).toString();
+    if (socket == null || _probing) {
+      return;
+    }
 
-      socket.add(
-        jsonEncode(<dynamic>[
-          null,
-          ref,
-          'phoenix',
-          'heartbeat',
-          <String, dynamic>{},
-        ]),
-      );
-    });
+    final String ref = (++_ref).toString();
+    final Completer<ChannelReply> completer = new Completer<ChannelReply>();
+
+    _probing = true;
+    _pending[ref] = completer;
+    socket.add(
+      jsonEncode(<dynamic>[
+        null,
+        ref,
+        'phoenix',
+        'heartbeat',
+        <String, dynamic>{},
+      ]),
+    );
+
+    unawaited(
+      completer.future
+          .timeout(heartbeatTimeout)
+          .then<void>(
+            (ChannelReply _) {
+              _probing = false;
+            },
+            onError: (Object e) {
+              _probing = false;
+              _pending.remove(ref);
+
+              if (identical(_socket, socket)) {
+                AppLogger.debug('heartbeat unanswered, reconnecting: $e');
+                _scheduleReconnect();
+              }
+            },
+          ),
+    );
   }
 
   void _scheduleReconnect() {
@@ -380,10 +430,10 @@ class ChannelClient {
 
   Future<void> _teardownSocket() async {
     _heartbeatTimer?.cancel();
-    await _sub?.cancel();
-    _sub = null;
+    _probing = false;
 
-    await _socket?.close();
+    final ChannelSocket? socket = _socket;
+
     _socket = null;
     _joinRef = null;
 
@@ -394,6 +444,9 @@ class ChannelClient {
     }
 
     _pending.clear();
+    await _sub?.cancel();
+    _sub = null;
+    await socket?.close();
   }
 
   void _setStatus(ConnectionStatus s) {

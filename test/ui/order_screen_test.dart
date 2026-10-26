@@ -98,6 +98,16 @@ void main() {
     expect(find.text('Dispatch has taken this job off you'), findsOneWidget);
   });
 
+  testWidgets('a job that ended while away is not called cancelled', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.state).thenReturn(const OrderNoLongerActive());
+    await _pump(tester, vm, _order(OrderStatus.assigned));
+
+    expect(find.text('This job is no longer active for you'), findsOneWidget);
+    expect(find.text('Order cancelled'), findsNothing);
+  });
+
   testWidgets(
     'a picked-up job cannot be delivered until photo and signature exist',
     (WidgetTester tester) async {

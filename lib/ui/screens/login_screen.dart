@@ -60,7 +60,7 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
             FilledButton(
-              onPressed: vm.submitting
+              onPressed: vm.submitting || vm.delayed
                   ? null
                   : vm.awaitingCode
                   ? vm.submitCode

@@ -20,14 +20,19 @@ class _DriverApi implements DriverApi {
   final ParseErrorLogger? errorLogger;
 
   @override
-  Future<CourierRegistrationResponse> registerCourier(
+  Future<dynamic> registerCourier(
+    String proof,
     RegisterCourierRequest body,
   ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
-    final _headers = <String, dynamic>{};
+    final _headers = <String, dynamic>{
+      r'X-Kinetix-Client': 'courier-app',
+      r'X-Firebase-AppCheck': proof,
+    };
+    _headers.removeWhere((k, v) => v == null);
     final _data = body;
-    final _options = _setStreamType<CourierRegistrationResponse>(
+    final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
@@ -37,22 +42,20 @@ class _DriverApi implements DriverApi {
           )
           .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
     );
-    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late CourierRegistrationResponse _value;
-    try {
-      _value = CourierRegistrationResponse.fromJson(_result.data!);
-    } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, response: _result);
-      rethrow;
-    }
+    final _result = await _dio.fetch(_options);
+    final _value = _result.data;
     return _value;
   }
 
   @override
-  Future<dynamic> login(LoginRequest body) async {
+  Future<dynamic> login(String proof, LoginRequest body) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
-    final _headers = <String, dynamic>{};
+    final _headers = <String, dynamic>{
+      r'X-Kinetix-Client': 'courier-app',
+      r'X-Firebase-AppCheck': proof,
+    };
+    _headers.removeWhere((k, v) => v == null);
     final _data = body;
     final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
@@ -70,12 +73,19 @@ class _DriverApi implements DriverApi {
   }
 
   @override
-  Future<SessionResponse> verifyTwoFactor(TwoFactorVerifyRequest body) async {
+  Future<dynamic> verifyTwoFactor(
+    String proof,
+    TwoFactorVerifyRequest body,
+  ) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
-    final _headers = <String, dynamic>{};
+    final _headers = <String, dynamic>{
+      r'X-Kinetix-Client': 'courier-app',
+      r'X-Firebase-AppCheck': proof,
+    };
+    _headers.removeWhere((k, v) => v == null);
     final _data = body;
-    final _options = _setStreamType<SessionResponse>(
+    final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
@@ -85,24 +95,22 @@ class _DriverApi implements DriverApi {
           )
           .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
     );
-    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late SessionResponse _value;
-    try {
-      _value = SessionResponse.fromJson(_result.data!);
-    } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, response: _result);
-      rethrow;
-    }
+    final _result = await _dio.fetch(_options);
+    final _value = _result.data;
     return _value;
   }
 
   @override
-  Future<SessionResponse> refresh(RefreshRequest body) async {
+  Future<dynamic> refresh(String proof, RefreshRequest body) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
-    final _headers = <String, dynamic>{};
+    final _headers = <String, dynamic>{
+      r'X-Kinetix-Client': 'courier-app',
+      r'X-Firebase-AppCheck': proof,
+    };
+    _headers.removeWhere((k, v) => v == null);
     final _data = body;
-    final _options = _setStreamType<SessionResponse>(
+    final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
@@ -112,14 +120,8 @@ class _DriverApi implements DriverApi {
           )
           .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
     );
-    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late SessionResponse _value;
-    try {
-      _value = SessionResponse.fromJson(_result.data!);
-    } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, response: _result);
-      rethrow;
-    }
+    final _result = await _dio.fetch(_options);
+    final _value = _result.data;
     return _value;
   }
 
@@ -144,13 +146,13 @@ class _DriverApi implements DriverApi {
   }
 
   @override
-  Future<DriverProfileEnvelope> me(String authorization) async {
+  Future<dynamic> me(String authorization) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{r'Authorization': authorization};
     _headers.removeWhere((k, v) => v == null);
     const Map<String, dynamic>? _data = null;
-    final _options = _setStreamType<DriverProfileEnvelope>(
+    final _options = _setStreamType<dynamic>(
       Options(method: 'GET', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
@@ -160,14 +162,8 @@ class _DriverApi implements DriverApi {
           )
           .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
     );
-    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
-    late DriverProfileEnvelope _value;
-    try {
-      _value = DriverProfileEnvelope.fromJson(_result.data!);
-    } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, response: _result);
-      rethrow;
-    }
+    final _result = await _dio.fetch(_options);
+    final _value = _result.data;
     return _value;
   }
 

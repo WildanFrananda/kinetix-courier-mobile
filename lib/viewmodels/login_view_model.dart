@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
+import 'package:fleet_pulse_mobile/mixins/sign_in_delay_mixin.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
 import 'package:fleet_pulse_mobile/routes/app_route.dart';
@@ -9,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
 
 @injectable
-class LoginViewModel extends ChangeNotifier {
+class LoginViewModel extends ChangeNotifier with SignInDelayMixin {
   LoginViewModel(this._router, this._session);
 
   static final RegExp _sixDigits = new RegExp(r'^\d{6}$');
@@ -26,7 +27,7 @@ class LoginViewModel extends ChangeNotifier {
   DateTime? _challengeExpiresAt;
 
   bool get submitting => _submitting;
-  String? get error => _error;
+  String? get error => delayMessage ?? _error;
   bool get awaitingCode => _challenge != null;
 
   void setEmail(String v) => _email = v.trim();
@@ -34,6 +35,10 @@ class LoginViewModel extends ChangeNotifier {
   void setCode(String v) => _code = v.trim();
 
   Future<void> submit() async {
+    if (_submitting || delayed) {
+      return;
+    }
+
     if (_email.isEmpty || _password.isEmpty) {
       _error = 'email and password required';
       notifyListeners();
@@ -65,8 +70,7 @@ class LoginViewModel extends ChangeNotifier {
   Future<void> submitCode() async {
     final TwoFactorChallenge? challenge = _challenge;
     final DateTime? expiresAt = _challengeExpiresAt;
-
-    if (challenge == null) {
+    if (challenge == null || _submitting || delayed) {
       return;
     }
 
@@ -120,10 +124,27 @@ class LoginViewModel extends ChangeNotifier {
   void _refused(Failure f) {
     _submitting = false;
 
+    if (f is SignInDelayedFailure) {
+      _error = null;
+      delayFor(f.wait);
+      notifyListeners();
+
+      return;
+    }
+
+    if (f is AppUpdateRequiredFailure) {
+      _challenge = null;
+      _challengeExpiresAt = null;
+      notifyListeners();
+      _router.replaceAll(const UpdateRequiredRoute());
+
+      return;
+    }
+
     if (f is PendingApprovalFailure) {
       _challenge = null;
       notifyListeners();
-      _router.push(const PendingApprovalRoute());
+      _router.replaceAll(const PendingApprovalRoute());
 
       return;
     }
@@ -136,6 +157,12 @@ class LoginViewModel extends ChangeNotifier {
       _router.push(const RegisterRoute());
 
       return;
+    }
+
+    if (f is UnreadableAnswerFailure || f is ChallengeSpentFailure) {
+      _challenge = null;
+      _challengeExpiresAt = null;
+      _code = '';
     }
 
     _error = f.message;

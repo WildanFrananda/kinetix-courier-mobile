@@ -154,4 +154,58 @@ void main() {
       verify(() => storage.delete(key: key)).called(1);
     }
   });
+  test(
+    'a session the fleet has not approved is kept without a driver',
+    () async {
+      stubRecord(recordExpiringAt(fixedNow)..['driver_id'] = null);
+
+      final DriverSession? read = await sut.read();
+
+      expect(read!.driverId, isNull);
+      expect(read.refreshToken, 'refresh');
+    },
+  );
+
+  test('a driver id that is not a number is not a session', () async {
+    stubRecord(recordExpiringAt(fixedNow)..['driver_id'] = 'one');
+
+    expect(await sut.read(), isNull);
+  });
+
+  test(
+    'rebind writes the fleet driver over the stored one, keeping tokens and expiry',
+    () async {
+      stubRecord(recordExpiringAt(fixedNow)..['driver_id'] = null);
+
+      await sut.rebind(const DriverId(9));
+
+      final String written =
+          verify(
+                () => storage.write(
+                  key: 'driver_session',
+                  value: captureAny(named: 'value'),
+                ),
+              ).captured.single
+              as String;
+      expect(jsonDecode(written), <String, Object?>{
+        'token': 'abc',
+        'refresh_token': 'refresh',
+        'driver_id': 9,
+        'expires_at': '2026-01-01T00:00:00.000Z',
+      });
+    },
+  );
+
+  test('rebind with nothing stored writes nothing', () async {
+    stubRecord(null);
+
+    await sut.rebind(const DriverId(9));
+
+    verifyNever(
+      () => storage.write(
+        key: any(named: 'key'),
+        value: any(named: 'value'),
+      ),
+    );
+  });
 }

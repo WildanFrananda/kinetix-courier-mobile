@@ -48,7 +48,7 @@ void main() {
   late StreamController<TelemetryPing> pingCtrl;
   late StreamController<DriverAvailability> availabilityCtrl;
   late StreamController<Failure> problemCtrl;
-  late StreamController<Order?> orderCtrl;
+  late StreamController<JobUpdate> orderCtrl;
   late StreamController<SessionEnd> endCtrl;
 
   setUpAll(() {
@@ -73,7 +73,7 @@ void main() {
     pingCtrl = StreamController<TelemetryPing>.broadcast();
     availabilityCtrl = StreamController<DriverAvailability>.broadcast();
     problemCtrl = StreamController<Failure>.broadcast();
-    orderCtrl = StreamController<Order?>.broadcast();
+    orderCtrl = StreamController<JobUpdate>.broadcast();
     endCtrl = StreamController<SessionEnd>.broadcast();
 
     when(() => conn.statusStream).thenAnswer((_) => statusCtrl.stream);
@@ -82,7 +82,7 @@ void main() {
     when(() => duty.availability).thenAnswer((_) => availabilityCtrl.stream);
     when(() => duty.problems).thenAnswer((_) => problemCtrl.stream);
     when(() => duty.onDuty).thenAnswer((_) => onDuty);
-    when(() => orders.watchActiveOrder()).thenAnswer((_) => orderCtrl.stream);
+    when(() => orders.watchJobs()).thenAnswer((_) => orderCtrl.stream);
     when(() => session.currentSession()).thenAnswer(
       (_) async => const DriverSession(
         driverId: DriverId(1),
@@ -135,9 +135,9 @@ void main() {
   test('order event pushes OrderRoute once (dedup)', () async {
     build();
     await pump();
-    orderCtrl.add(_order(5));
+    orderCtrl.add(new JobActive(_order(5)));
     await pump();
-    orderCtrl.add(_order(5));
+    orderCtrl.add(new JobActive(_order(5)));
     await pump();
     expect(router.stack.whereType<OrderRoute>().length, 1);
   });
@@ -174,16 +174,32 @@ void main() {
     final TrackingViewModel vm = await connected();
     await vm.toggleDuty();
 
-    orderCtrl.add(_order(5));
+    orderCtrl.add(new JobActive(_order(5)));
     await pump();
     expect((vm.state as TrackingOnline).availability, DriverAvailability.busy);
 
-    orderCtrl.add(null);
+    orderCtrl.add(const JobNone());
     await pump();
     expect(
       (vm.state as TrackingOnline).availability,
       DriverAvailability.online,
     );
+  });
+
+  test('a cancelled job frees the courier and opens nothing', () async {
+    final TrackingViewModel vm = await connected();
+    await vm.toggleDuty();
+    orderCtrl.add(new JobActive(_order(5)));
+    await pump();
+
+    orderCtrl.add(const JobCancelled(OrderId(5)));
+    await pump();
+
+    expect(
+      (vm.state as TrackingOnline).availability,
+      DriverAvailability.online,
+    );
+    expect(router.stack.whereType<OrderRoute>(), hasLength(1));
   });
 
   test('toggleDuty blocked on permission failure', () async {
@@ -221,6 +237,22 @@ void main() {
         () => session.logout(),
       ]);
       expect(router.stack.single, isA<LoginRoute>());
+    },
+  );
+
+  test(
+    'a build identity no longer accepts asks for an update and keeps the session',
+    () async {
+      build();
+      await pump();
+
+      endCtrl.add(const SessionUpdateRequired());
+      await pump();
+
+      expect(router.stack.single, isA<UpdateRequiredRoute>());
+      verify(() => duty.goOffDuty()).called(1);
+      verify(() => conn.disconnect()).called(1);
+      verifyNever(() => session.logout());
     },
   );
 

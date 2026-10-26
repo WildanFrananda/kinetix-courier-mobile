@@ -37,6 +37,8 @@ class FakeSession implements SessionRepository {
   DriverSession? stored;
   bool pendingApproval = false;
   bool secondFactor = false;
+  final List<Failure> loginRefusals = <Failure>[];
+  int codesTried = 0;
 
   @override
   Future<DriverSession?> currentSession() async => stored;
@@ -51,7 +53,13 @@ class FakeSession implements SessionRepository {
     required String email,
     required String password,
   }) async {
+    if (loginRefusals.isNotEmpty) {
+      return new Err<LoginOutcome>(loginRefusals.removeAt(0));
+    }
+
     if (pendingApproval) {
+      stored = _session;
+
       return const Err<LoginOutcome>(PendingApprovalFailure());
     }
 
@@ -73,6 +81,14 @@ class FakeSession implements SessionRepository {
     required TwoFactorChallenge challenge,
     required String code,
   }) async {
+    codesTried++;
+
+    if (codesTried > 5) {
+      return const Err<DriverSession>(
+        ChallengeSpentFailure('Too many wrong codes for this sign-in.'),
+      );
+    }
+
     if (code != _code) {
       return const Err<DriverSession>(RefusedFailure('That code is not valid'));
     }
@@ -133,33 +149,42 @@ class FakeConnection implements ConnectionRepository {
 }
 
 class FakeOrders implements OrderRepository {
-  final StreamController<Order?> _orders =
-      new StreamController<Order?>.broadcast();
-  final StreamController<OrderId> _unassigned =
-      new StreamController<OrderId>.broadcast();
+  final StreamController<JobUpdate> _jobs =
+      new StreamController<JobUpdate>.broadcast();
 
   String? deliveredWithPhoto;
   String? deliveredWithSignature;
+  String? keptSignature;
 
-  void assign(Order? order) => _orders.add(order);
+  void assign(Order order) => _jobs.add(new JobActive(order));
 
   void takeOff(OrderId id) {
-    _unassigned.add(id);
-    _orders.add(null);
+    _jobs
+      ..add(new JobUnassigned(id))
+      ..add(const JobNone());
   }
 
   @override
-  Stream<Order?> watchActiveOrder() => _orders.stream;
-
-  @override
-  Stream<OrderId> watchUnassigned() => _unassigned.stream;
+  Stream<JobUpdate> watchJobs() => _jobs.stream;
 
   @override
   Future<Result<Unit>> pickup(OrderId orderId) async {
-    _orders.add(_order(OrderStatus.pickedUp));
+    _jobs.add(new JobActive(_order(OrderStatus.pickedUp)));
 
     return const Ok<Unit>(Unit.unit);
   }
+
+  @override
+  Future<DeliveryProofDraft> proofDraft(OrderId orderId) async =>
+      const DeliveryProofDraft();
+
+  @override
+  Future<void> keepSignature(OrderId orderId, String podSignature) async {
+    keptSignature = podSignature;
+  }
+
+  @override
+  Future<void> discardProofDraft(OrderId orderId) async {}
 
   @override
   Future<Result<String>> attachPodPhoto(
@@ -182,8 +207,7 @@ class FakeOrders implements OrderRepository {
   }
 
   Future<void> dispose() async {
-    await _orders.close();
-    await _unassigned.close();
+    await _jobs.close();
   }
 }
 
@@ -324,6 +348,7 @@ void main() {
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(find.text('Signed'), findsOneWidget);
+      expect(orders.keptSignature, startsWith('data:image/png;base64,'));
 
       await tester.tap(deliver);
       await tester.pumpAndSettle();
@@ -359,6 +384,96 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('On duty'), findsOneWidget);
   });
+
+  testWidgets('five wrong codes send the courier back to the password', (
+    WidgetTester tester,
+  ) async {
+    session.secondFactor = true;
+    await start(tester);
+    await signIn(tester);
+
+    for (int attempt = 0; attempt < 6; attempt++) {
+      await tester.enterText(find.byType(TextField), '000000');
+      await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text('Too many wrong codes for this sign-in.'), findsOneWidget);
+    expect(find.text('Authentication code'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a delayed sign-in says how long to wait, holds the button, then lets the courier in',
+    (WidgetTester tester) async {
+      session.loginRefusals.add(
+        const SignInDelayedFailure(Duration(seconds: 1)),
+      );
+      await start(tester);
+
+      await signIn(tester);
+
+      expect(
+        find.text('Too many sign-in attempts. Try again in 1 second.'),
+        findsOneWidget,
+      );
+      final Finder logIn = find.widgetWithText(FilledButton, 'Log in');
+      expect(tester.widget<FilledButton>(logIn).onPressed, isNull);
+
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(logIn).onPressed, isNotNull);
+
+      await tester.tap(logIn);
+      await tester.pumpAndSettle();
+      expect(find.text('On duty'), findsOneWidget);
+    },
+  );
+
+  testWidgets('an administrator is told the app is for couriers', (
+    WidgetTester tester,
+  ) async {
+    session.loginRefusals.add(const AdminAccountFailure());
+    await start(tester);
+
+    await signIn(tester);
+
+    expect(find.textContaining('administrator account'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
+    expect(session.stored, isNull);
+  });
+
+  testWidgets(
+    'a build identity does not accept asks for an update, not for a password',
+    (WidgetTester tester) async {
+      session.loginRefusals.add(const AppUpdateRequiredFailure());
+      await start(tester);
+
+      await signIn(tester);
+      expect(find.text('Update the app'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Try again'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a session identity will not renew for this build asks for an update and is kept',
+    (WidgetTester tester) async {
+      session.stored = _session;
+      await start(tester);
+      expect(find.text('On duty'), findsOneWidget);
+
+      connection.end(const SessionUpdateRequired());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Update the app'), findsOneWidget);
+      expect(session.stored, _session);
+    },
+  );
 
   testWidgets('registration waits for approval', (WidgetTester tester) async {
     await start(tester);
@@ -430,4 +545,26 @@ void main() {
 
     expect(find.text('Dispatch has taken this job off you'), findsOneWidget);
   });
+  testWidgets(
+    'a pending courier who signs in waits for approval, and is let in once approved',
+    (WidgetTester tester) async {
+      session.pendingApproval = true;
+      await start(tester);
+
+      await signIn(tester);
+      expect(
+        find.text('Your account is awaiting admin approval'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Still waiting for approval.'), findsOneWidget);
+
+      session.pendingApproval = false;
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text('On duty'), findsOneWidget);
+    },
+  );
 }

@@ -41,11 +41,21 @@ void main() {
       (result as Err<DriverProfile>).failure;
 
   test('an approved courier is its profile', () async {
-    when(
-      () => api.me(any()),
-    ).thenAnswer((_) async => const DriverProfileEnvelope(data: profile));
+    when(() => api.me(any())).thenAnswer(
+      (_) async => <String, dynamic>{
+        'data': <String, dynamic>{
+          'id': 9,
+          'vehicle_plate': 'B 1 ABC',
+          'capacity_kg': 100,
+          'status': 'offline',
+          'active': true,
+        },
+      },
+    );
 
-    expect(await sut.check('tok'), isA<Ok<DriverProfile>>());
+    final Result<DriverProfile> res = await sut.check('tok');
+
+    expect((res as Ok<DriverProfile>).value, profile);
     verify(() => api.me('Bearer tok')).called(1);
   });
 
@@ -102,5 +112,15 @@ void main() {
     );
 
     expect(failureOf(await sut.check('tok')), isA<NetworkFailure>());
+  });
+  test('an answer this app cannot read is not a network failure', () async {
+    when(
+      () => api.me(any()),
+    ).thenAnswer((_) async => <String, dynamic>{'data': 'not a driver'});
+
+    final Failure failure = failureOf(await sut.check('tok'));
+
+    expect(failure, isNot(isA<NetworkFailure>()));
+    expect(failure.message, contains('cannot read'));
   });
 }

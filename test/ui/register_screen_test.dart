@@ -37,6 +37,25 @@ void main() {
     when(() => vm.submitting).thenReturn(false);
     when(() => vm.error).thenReturn(null);
     when(() => vm.successMessage).thenReturn(null);
+    when(() => vm.delayed).thenReturn(false);
+  });
+
+  testWidgets('a delayed registration holds the submit', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.delayed).thenReturn(true);
+    when(() => vm.error).thenReturn('Try again in 8 seconds.');
+    await _pump(tester, vm);
+
+    final Finder submit = find.widgetWithText(
+      FilledButton,
+      'Submit Registration',
+    );
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+
+    expect(find.text('Try again in 8 seconds.'), findsOneWidget);
+    verifyNever(() => vm.submit());
   });
 
   testWidgets('renders every field and submits', (WidgetTester tester) async {

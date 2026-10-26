@@ -90,7 +90,7 @@ class RegisterScreen extends StatelessWidget {
                 ),
               ),
             FilledButton(
-              onPressed: vm.submitting ? null : vm.submit,
+              onPressed: vm.submitting || vm.delayed ? null : vm.submit,
               child: vm.submitting
                   ? const SizedBox(
                       height: 18,

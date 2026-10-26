@@ -36,6 +36,41 @@ void main() {
     when(() => vm.submit()).thenAnswer((_) async {});
     when(() => vm.submitCode()).thenAnswer((_) async {});
     when(() => vm.awaitingCode).thenReturn(false);
+    when(() => vm.delayed).thenReturn(false);
+  });
+
+  testWidgets('a delayed sign-in shows the wait and holds the button', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.delayed).thenReturn(true);
+    when(
+      () => vm.error,
+    ).thenReturn('Too many sign-in attempts. Try again in 8 seconds.');
+    await _pump(tester, vm);
+
+    expect(
+      find.text('Too many sign-in attempts. Try again in 8 seconds.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(FilledButton));
+    verifyNever(() => vm.submit());
+  });
+
+  testWidgets('a delayed code holds Verify but not signing in again', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.delayed).thenReturn(true);
+    when(() => vm.awaitingCode).thenReturn(true);
+    when(() => vm.error).thenReturn('wait');
+    await _pump(tester, vm);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+    await tester.tap(find.text('Sign in again'));
+
+    verifyNever(() => vm.submitCode());
+    verify(() => vm.cancelCode()).called(1);
   });
 
   testWidgets('renders fields and submits', (WidgetTester tester) async {

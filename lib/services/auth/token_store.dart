@@ -27,10 +27,10 @@ class TokenStore {
   Future<void> save(DriverSession session, DateTime expiresAt) async {
     await _storage.write(
       key: _kSession,
-      value: jsonEncode(<String, Object>{
+      value: jsonEncode(<String, Object?>{
         _fToken: session.token,
         _fRefreshToken: session.refreshToken,
-        _fDriverId: session.driverId.value,
+        _fDriverId: session.driverId?.value,
         _fExpiresAt: expiresAt.toUtc().toIso8601String(),
       }),
     );
@@ -39,26 +39,19 @@ class TokenStore {
   Future<DriverSession?> read() async {
     final Map<String, Object?>? record = await _record();
 
-    if (record == null) {
-      return null;
+    return record == null ? null : _sessionOf(record);
+  }
+
+  Future<void> rebind(DriverId driverId) async {
+    final Map<String, Object?>? record = await _record();
+    final DriverSession? session = record == null ? null : _sessionOf(record);
+    final DateTime? expiresAt = record == null ? null : _expiresAt(record);
+
+    if (session == null || expiresAt == null) {
+      return;
     }
 
-    final Object? token = record[_fToken];
-    final Object? refreshToken = record[_fRefreshToken];
-    final Object? driverId = record[_fDriverId];
-
-    if (token is! String ||
-        refreshToken is! String ||
-        driverId is! int ||
-        _expiresAt(record) == null) {
-      return null;
-    }
-
-    return new DriverSession(
-      driverId: new DriverId(driverId),
-      token: token,
-      refreshToken: refreshToken,
-    );
+    await save(session.copyWith(driverId: driverId), expiresAt);
   }
 
   Future<bool> accessExpired() async {
@@ -74,6 +67,25 @@ class TokenStore {
     for (final String key in _legacyKeys) {
       await _storage.delete(key: key);
     }
+  }
+
+  DriverSession? _sessionOf(Map<String, Object?> record) {
+    final Object? token = record[_fToken];
+    final Object? refreshToken = record[_fRefreshToken];
+    final Object? driverId = record[_fDriverId];
+
+    if (token is! String ||
+        refreshToken is! String ||
+        (driverId != null && driverId is! int) ||
+        _expiresAt(record) == null) {
+      return null;
+    }
+
+    return new DriverSession(
+      driverId: driverId is int ? new DriverId(driverId) : null,
+      token: token,
+      refreshToken: refreshToken,
+    );
   }
 
   Future<Map<String, Object?>?> _record() async {

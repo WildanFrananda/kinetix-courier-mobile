@@ -20,3 +20,7 @@ class OrderCancelled extends OrderUiState {
 class OrderUnassigned extends OrderUiState {
   const OrderUnassigned();
 }
+
+class OrderNoLongerActive extends OrderUiState {
+  const OrderNoLongerActive();
+}

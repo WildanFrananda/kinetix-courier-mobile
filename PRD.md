@@ -43,7 +43,8 @@ receiver's signature.
 
 - Turn-by-turn navigation (the phone's map app opens through a deep link).
 - Chat, ratings, earnings or payments in the app.
-- Enabling or disabling the second factor (done elsewhere; the app honours it).
+- Setting up, enabling or disabling the second factor (done elsewhere, and identity asks for the account password
+  there; the app honours the result).
 - The dispatcher's tools (matching's backoffice API).
 
 ---
@@ -74,6 +75,8 @@ POST /api/v1/couriers/register
 - A `400` or `503` **after the account was created** carries `accountExists: true` and asks the courier to submit
   again with the same email and password; the app shows that text as it is. `409` means the email belongs to an
   account that cannot be resumed here.
+- Resuming an existing account checks its password, so the account's sign-in delay applies: `429 SIGN_IN_DELAYED`
+  (5.2) holds the submit until the wait has passed.
 - The account is pending until an administrator approves it. The app keeps the session and shows the waiting
   screen.
 
@@ -83,22 +86,51 @@ POST /api/v1/couriers/register
 POST /api/v1/auth/login          { "email", "password" }
   200: { "accessToken", "refreshToken", "expiresIn", "tokenType", "user" }
   200: { "mfaRequired": true, "challengeToken", "expiresIn" }        (the account has a second factor)
-  401: wrong email or password      400: invalid input      429: too many attempts
+  200: { "mfaEnrolmentRequired": true, "enrolmentToken", ... }      (an admin without one; not for this app)
+  401: wrong email or password      400: invalid input
+  429: { "error": "SIGN_IN_DELAYED", "retryAfterSeconds" } with Retry-After, or the per-address limit's Retry-After
 
 POST /api/v1/auth/2fa/verify     { "challengeToken", "code" }          (code: six digits)
-  200: the session, as login        401: wrong code, or a challenge already answered or expired
+  200: the session, as login
+  401: { "message": "That code is not valid" }                          (the challenge stays open)
+  401: { "message": "This challenge allows no more attempts; sign in again" }, or any other 401  (the challenge is spent)
+  429: as login
 
 POST /api/v1/auth/refresh        { "refreshToken" }                    (rotates the pair)
 POST /api/v1/auth/logout         { "refreshToken" }, Authorization: Bearer <access token>     204
 ```
 
+- Identity counts sign-in attempts per account, whatever the address: from the fifth the next waits 1 s, then 2, 4 …
+  up to 60 s, never a lockout. A request that arrives inside the wait is answered `429 SIGN_IN_DELAYED` before any
+  password or code is read, and is not counted. The app says how many seconds are left, counts down, and sends
+  nothing until then; it is never a wrong password or a wrong code, and it never touches a stored session. A `429`
+  that names no wait says "wait a minute" and holds nothing.
+- An administrator without a second factor who signs in gets an enrolment token instead of a session. The courier
+  app is not for administrators: it says so, keeps nothing and asks the fleet nothing.
+
+- Registration, login, `2fa/verify` and refresh carry `X-Kinetix-Client: courier-app` and `X-Firebase-AppCheck: <App
+  Check token>`; logout does not. `401 CLIENT_PROOF_REQUIRED` / `CLIENT_PROOF_INVALID` gets one fresh token and one
+  retry; a second refusal says the app could not prove it is genuine. `503 CLIENT_PROOF_UNAVAILABLE` is "try again
+  later", never a sign-out. `400 UNKNOWN_CLIENT` / `CLIENT_REQUIRED` mean identity does not accept this build: the
+  app shows "Update the app", wherever it was (sign-in, the code, registration, a renewal), retries nothing, and
+  keeps a stored session, whose refresh token identity did not spend. `401 CLIENT_MISMATCH` on refresh (the session
+  belongs to another client) ends the session once, without a fresh proof or a retry; the courier signs in again.
 - The access token lives 15 minutes, the refresh token 30 days. Identity treats a refresh token presented twice as
-  stolen, so the app renews one request at a time and stores the new pair in one write before using it.
-- A challenge answers once; a wrong code does not spend it. After 300 s the courier signs in again.
+  stolen, so the app renews one request at a time and stores the new pair in one write before using it. A refresh
+  refused (`400`, `401`, `403`, but not `UNKNOWN_CLIENT` / `CLIENT_REQUIRED`) signs out; one whose answer was lost after it was sent (a timeout, `500`, `504`, an
+  unreadable `2xx`) also signs out rather than presenting a possibly spent token again; `429`, `502`, `503` and no
+  connection keep the session.
+- A challenge takes five attempts. A wrong code keeps it open; the sixth attempt is refused even with the right
+  code, and the courier goes back to the password for a new challenge. The challenge also ends once a code is
+  accepted, or when a code already used is presented. After 300 s the courier signs in again. Identity names none
+  of these refusals with a code, so the app tells them apart by identity's message: only "That code is not valid"
+  keeps the code step.
 - Enabling or disabling a second factor ends every other session; the courier's next renewal is refused and the
   app signs out.
 - Sign-out ends the refresh family at identity before the phone forgets the session. If identity cannot be
   reached, the phone forgets it anyway.
+- After login, `driver/me` decides: approved keeps the session; `pending_approval` keeps it for the waiting
+  screen; any other answer revokes the fresh session at identity and keeps nothing.
 
 ### 5.3 May this account drive — matching
 
@@ -142,7 +174,8 @@ approved, or deactivated) shows the waiting screen; `404` sends the courier to f
   `invalid_telemetry`; more than 100 in 10 s is `rate_limited`.
 - `ping_batch` positions are history: matching stores them and never makes them the live position. One more than
   a day old is refused as `too_old`, one more than five minutes ahead as `ahead_of_server_clock`. An `ok` reply
-  settles the whole batch; an error reply settles nothing. Batches have their own budget, 30 per 60 s.
+  settles the whole batch, refused entries included (they are final: logged, and a clock ahead is shown to the
+  courier); an error reply settles nothing. Batches have their own budget, 30 per 60 s.
 - `order_id` must be a positive integer (`invalid_order_id` otherwise).
 - A `pickup` or `delivered` repeated by the courier who made it answers `ok`, so a retry after a lost reply is
   success. `proof_unverifiable` means the bucket could not be asked: try again.
@@ -165,8 +198,9 @@ approved, or deactivated) shows the waiting screen; `404` sends the courier to f
 ### 5.7 Phoenix channel wire protocol
 
 Every frame is `[join_ref, ref, topic, event, payload]` (serializer 2.0.0). Replies are `phx_reply`, correlated
-by `ref`. A heartbeat (`phoenix` topic, `heartbeat` event) goes every 30 s. The app's `ChannelClient` implements
-this over `web_socket_channel`'s `IOWebSocketChannel`.
+by `ref`. A heartbeat (`phoenix` topic, `heartbeat` event) goes every 30 s and must be answered within 10 s, and a
+push that times out sends one at once; an unanswered heartbeat is a dead connection, which is reconnected. The
+app's `ChannelClient` implements this over `web_socket_channel`'s `IOWebSocketChannel`.
 
 ---
 
@@ -178,13 +212,17 @@ this over `web_socket_channel`'s `IOWebSocketChannel`.
   sign-in. When matching cannot be asked, tracking opens and keeps trying.
 - A refused socket is renewed once; a second refusal asks 5.3, and the answer decides between the waiting screen
   and sign-in. The courier is never signed out because a service could not be reached.
+- The waiting screen has "Check again", which asks 5.3: approved → tracking; still pending → says so.
+- A build identity does not accept (`UNKNOWN_CLIENT`, `CLIENT_REQUIRED`) shows "Update the app" from wherever it
+  is found, and keeps the session; "Try again" starts again from the splash.
 
 ### 6.2 Connectivity
 
 - One connection indicator: connected / connecting / reconnecting / offline.
 - Backoff reconnect (1, 2, 4 … 30 s, with jitter), and at once when the app returns to the foreground.
-- `pickup` and `delivered` are retried until answered.
-- A position that cannot go live (no socket, not yet back on duty, a `ping` that failed) is kept in Hive and sent
+- `pickup` and `delivered` are retried until answered (1, 2, 4 … 15 s), while the courier's session lasts.
+- A position that cannot go live (no socket, not yet back on duty, a `ping` that failed, a `rate_limited` pause)
+  belongs to the courier who took it and is sent only on that courier's socket. It is kept in Hive and sent
   later with `ping_batch`, never as a live `ping`: oldest first, 100 at a time, one batch in flight, after the join,
   `status online` and the fresh live fix. A batch is deleted only when an `ok` reply settles it; an error reply keeps
   it for a retry with backoff (60 s after `rate_limited`). Positions older than a day are dropped on the phone. The
@@ -210,7 +248,9 @@ this over `web_socket_channel`'s `IOWebSocketChannel`.
 - "Mark as Picked Up" while assigned; then the proof: a camera photo (at most 1920 px a side, JPEG quality 85) and
   the receiver's signature drawn on screen; "Mark as Delivered" only when both exist.
 - `order_updated` cancelled shows "Order cancelled"; `order_unassigned` shows that dispatch took the job off the
-  courier.
+  courier; an `active_order` with no job shows that the job is no longer active. News about another job, or an
+  event this app cannot read, changes nothing on the job screen.
+- The photo URL and the signature survive the app being closed until the delivery is answered (at most a day).
 
 ---
 
@@ -222,6 +262,7 @@ this over `web_socket_channel`'s `IOWebSocketChannel`.
 | `LoginRoute` | Login | Email and password, then the code when a second factor is required |
 | `RegisterRoute` | Register | Person, vehicle and password |
 | `PendingApprovalRoute` | Waiting | The account is not approved (yet); back to sign-in signs out |
+| `UpdateRequiredRoute` | Update | Identity does not accept this build; try again from the splash |
 | `TrackingRoute` | Tracking (home) | Connection, duty switch, availability, last position |
 | `OrderRoute(order)` | Job | Pickup and drop-off, the proof, pickup and deliver actions |
 
@@ -236,10 +277,11 @@ this over `web_socket_channel`'s `IOWebSocketChannel`.
 | :--- | :--- |
 | Services | `DriverApi` (Retrofit over Dio), `TokenStore` (secure storage, one record), `SessionRenewer`, `FleetStanding`, `ChannelClient` + `WsChannelSocket`, `LocationService`, `OfflinePositionStore` (Hive), `PodPhotoUploader` |
 | Repositories | `SessionRepository` (sign-in, second factor, standing, sign-out), `ConnectionRepository` (socket, renewal, why a refusal), `DutyRepository` (duty, the live position and the offline queue), `OrderRepository` (jobs and proof) |
-| ViewModels | Splash, Login, Register, PendingApproval, Tracking, Order |
+| ViewModels | Splash, Login, Register, PendingApproval, UpdateRequired, Tracking, Order |
 
-`HTTP_BASE` and `WS_BASE` come from `--dart-define-from-file=dart_defines/<environment>.json`; there are no
-defaults, and a build without them shows an error screen instead of starting.
+`HTTP_BASE`, `WS_BASE`, `APP_CHECK_PROVIDER` and the `FIREBASE_*` values come from
+`--dart-define-from-file=dart_defines/<environment>.json`; there are no defaults, and a build without them shows an
+error screen instead of starting.
 
 ---
 
@@ -252,7 +294,8 @@ defaults, and a build without them shows an error screen instead of starting.
 | `geolocator` | Position stream, and its Android location foreground service |
 | `permission_handler` | Location "always" and notification permissions |
 | `flutter_secure_storage` | The session |
-| `hive`, `hive_flutter` | Positions recorded offline, until a `ping_batch` settles them |
+| `hive`, `hive_flutter` | Positions recorded offline, until a `ping_batch` settles them; the proof of delivery until it is answered |
+| `firebase_core`, `firebase_app_check` | The App Check token identity requires (Play Integrity, App Attest), options from dart-defines |
 | `image_picker`, `signature`, `crypto` | The proof of delivery and its SHA-256 |
 | `url_launcher` | Pickup and drop-off in the phone's map app |
 | `provider`, `get_it`, `injectable`, `freezed`, `json_serializable` | The architecture |
@@ -268,7 +311,8 @@ defaults, and a build without them shows an error screen instead of starting.
   with the permission prompts and store-review justifications they need.
 - **Type safety:** every payload is parsed into a `freezed` model at the repository boundary.
 - **Security:** TLS only, no cleartext in any build; the session in secure storage only; the token never in a URL
-  or a log; no precise coordinates logged in release builds.
+  or a log; no precise coordinates logged in release builds; every identity call that issues tokens carries an App
+  Check token, and a release build never uses the debug provider.
 
 ---
 

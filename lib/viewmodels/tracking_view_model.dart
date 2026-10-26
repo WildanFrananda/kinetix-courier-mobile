@@ -25,7 +25,7 @@ class TrackingViewModel extends ChangeNotifier {
     _pingSub = _duty.sent.listen(_onPing);
     _availabilitySub = _duty.availability.listen(_onAvailability);
     _problemSub = _duty.problems.listen(_onProblem);
-    _orderSub = _orders.watchActiveOrder().listen(_onOrder);
+    _jobSub = _orders.watchJobs().listen(_onJob);
     _endSub = _connection.sessionEnded.listen(
       (SessionEnd end) => unawaited(_onSessionEnded(end)),
     );
@@ -42,7 +42,7 @@ class TrackingViewModel extends ChangeNotifier {
   StreamSubscription<TelemetryPing>? _pingSub;
   StreamSubscription<DriverAvailability>? _availabilitySub;
   StreamSubscription<Failure>? _problemSub;
-  StreamSubscription<Order?>? _orderSub;
+  StreamSubscription<JobUpdate>? _jobSub;
   StreamSubscription<SessionEnd>? _endSub;
 
   TrackingState _state = const TrackingConnecting();
@@ -105,6 +105,8 @@ class TrackingViewModel extends ChangeNotifier {
         _router.replaceAll(const LoginRoute());
       case SessionNotApproved():
         _router.replaceAll(const PendingApprovalRoute());
+      case SessionUpdateRequired():
+        _router.replaceAll(const UpdateRequiredRoute());
     }
   }
 
@@ -128,22 +130,25 @@ class TrackingViewModel extends ChangeNotifier {
     _recompute();
   }
 
-  void _onOrder(Order? order) {
-    _hasJob =
-        order != null &&
-        (order.status == OrderStatus.assigned ||
-            order.status == OrderStatus.pickedUp);
+  void _onJob(JobUpdate update) {
+    switch (update) {
+      case JobActive(:final Order order):
+        _hasJob =
+            order.status == OrderStatus.assigned ||
+            order.status == OrderStatus.pickedUp;
 
-    if (order == null) {
-      _showOrderId = null;
-      _recompute();
-
-      return;
-    }
-
-    if (order.id.value != _showOrderId) {
-      _showOrderId = order.id.value;
-      _router.push(new OrderRoute(order: order));
+        if (_hasJob && order.id.value != _showOrderId) {
+          _showOrderId = order.id.value;
+          _router.push(new OrderRoute(order: order));
+        }
+      case JobNone():
+        _hasJob = false;
+        _showOrderId = null;
+      case JobCancelled(:final OrderId id) || JobUnassigned(:final OrderId id):
+        if (id.value == _showOrderId) {
+          _hasJob = false;
+          _showOrderId = null;
+        }
     }
 
     _recompute();
@@ -180,7 +185,7 @@ class TrackingViewModel extends ChangeNotifier {
     unawaited(_pingSub?.cancel());
     unawaited(_availabilitySub?.cancel());
     unawaited(_problemSub?.cancel());
-    unawaited(_orderSub?.cancel());
+    unawaited(_jobSub?.cancel());
     unawaited(_endSub?.cancel());
     super.dispose();
   }

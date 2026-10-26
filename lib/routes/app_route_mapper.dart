@@ -7,12 +7,14 @@ import 'package:fleet_pulse_mobile/ui/screens/pending_approval_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/register_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/splash_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/tracking_screen.dart';
+import 'package:fleet_pulse_mobile/ui/screens/update_required_screen.dart';
 import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/pending_approval_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/register_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/splash_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
+import 'package:fleet_pulse_mobile/viewmodels/update_required_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -36,6 +38,10 @@ class AppRouteMapper {
       PendingApprovalRoute() => MaterialPage<void>(
         key: const ValueKey<String>('pending-approval'),
         child: _inject<PendingApprovalViewModel>(const PendingApprovalScreen()),
+      ),
+      UpdateRequiredRoute() => MaterialPage<void>(
+        key: const ValueKey<String>('update-required'),
+        child: _inject<UpdateRequiredViewModel>(const UpdateRequiredScreen()),
       ),
       TrackingRoute() => MaterialPage<void>(
         key: const ValueKey<String>('tracking'),

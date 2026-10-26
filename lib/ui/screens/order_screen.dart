@@ -47,6 +47,10 @@ class _OrderScreenState extends State<OrderScreen> {
               title: 'Dispatch has taken this job off you',
               onBack: vm.back,
             ),
+            OrderNoLongerActive() => _CancelledView(
+              title: 'This job is no longer active for you',
+              onBack: vm.back,
+            ),
             OrderShowing(
               :final Order order,
               :final bool submitting,

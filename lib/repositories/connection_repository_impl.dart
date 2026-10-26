@@ -7,13 +7,19 @@ import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
 import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
 import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
+import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
 import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:injectable/injectable.dart';
 
 @LazySingleton(as: ConnectionRepository)
 class ConnectionRepositoryImpl implements ConnectionRepository {
-  ConnectionRepositoryImpl(this._channel, this._renewer, this._fleet) {
+  ConnectionRepositoryImpl(
+    this._channel,
+    this._renewer,
+    this._fleet,
+    this._store,
+  ) {
     _refusedSub = _channel.refused.listen((_) => unawaited(_onRefused()));
     _notApprovedSub = _channel.notApproved.listen(
       (_) => _end(const SessionNotApproved()),
@@ -26,6 +32,7 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
   final ChannelClient _channel;
   final SessionRenewer _renewer;
   final FleetStanding _fleet;
+  final TokenStore _store;
 
   final StreamController<SessionEnd> _ended =
       new StreamController<SessionEnd>.broadcast();
@@ -118,6 +125,9 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
       case Err<DriverSession>(:final Failure failure)
           when failure is AuthFailure:
         _end(const SessionSignedOut());
+      case Err<DriverSession>(:final Failure failure)
+          when failure is AppUpdateRequiredFailure:
+        _end(const SessionUpdateRequired());
       case Err<DriverSession>():
         _scheduleRecovery(_renew);
     }
@@ -139,6 +149,9 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
     }
 
     switch (standing) {
+      case Ok<DriverProfile>(:final DriverProfile value)
+          when value.id != session.driverId:
+        await _rebind(session, value.id);
       case Err<DriverProfile>(:final Failure failure)
           when failure is PendingApprovalFailure:
         _end(const SessionNotApproved());
@@ -149,6 +162,18 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
       case Ok<DriverProfile>() || Err<DriverProfile>():
         _scheduleRecovery(_reconnect);
     }
+  }
+
+  Future<void> _rebind(DriverSession session, DriverId driverId) async {
+    AppLogger.debug('the fleet names this courier driver ${driverId.value}');
+    await _store.rebind(driverId);
+
+    if (!_wanted) {
+      return;
+    }
+
+    _session = session.copyWith(driverId: driverId);
+    await _reconnect();
   }
 
   Future<void> _reconnect() async {

@@ -20,6 +20,10 @@ class PendingApprovalRoute extends AppRoute {
   const PendingApprovalRoute();
 }
 
+class UpdateRequiredRoute extends AppRoute {
+  const UpdateRequiredRoute();
+}
+
 class TrackingRoute extends AppRoute {
   const TrackingRoute();
 }

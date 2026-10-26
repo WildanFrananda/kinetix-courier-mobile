@@ -15,8 +15,8 @@ class ConfigErrorApp extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           children: <Widget>[
             const Text(
-              'The app was built without the address of the Kinetix edge, '
-              'so it has nowhere to connect.',
+              'The app was built without settings it needs to reach the '
+              'Kinetix edge and prove it is genuine, so it does not start.',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),

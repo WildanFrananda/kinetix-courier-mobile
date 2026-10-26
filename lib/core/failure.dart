@@ -22,6 +22,9 @@ class ChannelFailure extends Failure {
   const ChannelFailure(this.reason);
 
   static const Map<String, String> _explanations = <String, String>{
+    'ahead_of_server_clock':
+        'Positions kept while offline were refused because the phone clock is '
+        'ahead. Set the date and time automatically.',
     'forbidden': 'That job belongs to another courier.',
     'invalid_order_id': 'The job number was not accepted.',
     'invalid_photo_hash': 'The photo could not be prepared; take it again.',
@@ -94,6 +97,67 @@ class ServiceUnavailableFailure extends Failure {
 
   @override
   final String message;
+}
+
+class UnreadableAnswerFailure extends Failure {
+  const UnreadableAnswerFailure(this.message);
+
+  @override
+  final String message;
+}
+
+class UntrustedClientFailure extends Failure {
+  const UntrustedClientFailure([
+    this.message =
+        'This copy of the app could not prove it is the genuine Kinetix courier '
+        'app. Install it from Google Play or the App Store.',
+  ]);
+
+  @override
+  final String message;
+}
+
+class SignInDelayedFailure extends Failure {
+  const SignInDelayedFailure(this.wait);
+
+  final Duration wait;
+
+  @override
+  String get message => tryAgainIn(wait);
+
+  static String tryAgainIn(Duration left) {
+    final int milliseconds = left.inMilliseconds;
+    final int seconds = milliseconds <= Duration.millisecondsPerSecond
+        ? 1
+        : (milliseconds + Duration.millisecondsPerSecond - 1) ~/
+              Duration.millisecondsPerSecond;
+
+    return 'Too many sign-in attempts. Try again in $seconds '
+        '${seconds == 1 ? 'second' : 'seconds'}.';
+  }
+}
+
+class ChallengeSpentFailure extends Failure {
+  const ChallengeSpentFailure(this.message);
+
+  @override
+  final String message;
+}
+
+class AdminAccountFailure extends Failure {
+  const AdminAccountFailure();
+
+  @override
+  String get message =>
+      'This is an administrator account, and this app is for couriers. Sign '
+      'in with a courier account.';
+}
+
+class AppUpdateRequiredFailure extends Failure {
+  const AppUpdateRequiredFailure();
+
+  @override
+  String get message => 'Identity does not accept this version of the app.';
 }
 
 Failure failureFromReason(String? reason) =>

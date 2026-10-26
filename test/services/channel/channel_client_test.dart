@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -192,7 +194,7 @@ void main() {
 
       unawaited(
         client
-            .pingBatch(<TelemetryPing>[
+            .pingBatch(const DriverId(1), <TelemetryPing>[
               new TelemetryPing(
                 latitude: -6.2,
                 longitude: 106.8,
@@ -228,4 +230,144 @@ void main() {
       });
     },
   );
+  test('a batch of another courier is never sent on this socket', () async {
+    final List<dynamic> join = await joinFrame();
+    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+    await pump();
+
+    await expectLater(
+      client.pingBatch(const DriverId(2), <TelemetryPing>[
+        new TelemetryPing(
+          latitude: -6.2,
+          longitude: 106.8,
+          recordedAt: DateTime.utc(2026, 10, 21, 8),
+        ),
+      ]),
+      throwsA(isA<ChannelException>()),
+    );
+    expect(fake.sent, hasLength(1));
+  });
+
+  test(
+    'a session whose driver the fleet has not named opens no socket and is not approved',
+    () async {
+      bool notApproved = false;
+      int opened = 0;
+      final ChannelClient sut = new ChannelClient.withConnector((
+        Uri uri,
+        Iterable<String> _,
+      ) {
+        opened++;
+
+        return fake;
+      });
+      sut.notApproved.listen((_) => notApproved = true);
+
+      await sut.connect(
+        const DriverSession(
+          driverId: null,
+          token: 'tok',
+          refreshToken: 'refresh-tok',
+        ),
+        wsBase: 'wss://edge.test',
+      );
+      await pump();
+
+      expect(notApproved, isTrue);
+      expect(opened, 0);
+      expect(sut.status, ConnectionStatus.disconnected);
+      await sut.dispose();
+    },
+  );
+
+  group('a dead connection', () {
+    late List<FakeSocket> opened;
+    late ChannelClient sut;
+
+    void replyOn(
+      FakeSocket socket,
+      List<dynamic> frame,
+      Map<String, dynamic> response,
+    ) {
+      socket.emit(
+        jsonEncode(<dynamic>[
+          frame[0],
+          frame[1],
+          frame[2],
+          'phx_reply',
+          <String, dynamic>{'status': 'ok', 'response': response},
+        ]),
+      );
+    }
+
+    List<dynamic> lastOn(FakeSocket socket) =>
+        jsonDecode(socket.sent.last) as List<dynamic>;
+
+    void joined(FakeAsync async) {
+      opened = <FakeSocket>[];
+      sut = new ChannelClient.withConnector((Uri uri, Iterable<String> _) {
+        final FakeSocket socket = new FakeSocket()..completeReady();
+
+        opened.add(socket);
+
+        return socket;
+      });
+      sut.connect(session, wsBase: 'wss://edge.test').ignore();
+      async.flushMicrotasks();
+      replyOn(opened.single, lastOn(opened.single), <String, dynamic>{
+        'status': 'offline',
+      });
+      async.flushMicrotasks();
+      expect(sut.status, ConnectionStatus.connected);
+    }
+
+    test('a heartbeat that is never answered reconnects', () {
+      fakeAsync((FakeAsync async) {
+        joined(async);
+
+        async.elapse(const Duration(seconds: 30));
+        expect(lastOn(opened.single)[3], 'heartbeat');
+
+        async.elapse(const Duration(seconds: 15));
+
+        expect(sut.status, isNot(ConnectionStatus.connected));
+        sut.dispose().ignore();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('an answered heartbeat keeps the connection', () {
+      fakeAsync((FakeAsync async) {
+        joined(async);
+
+        async.elapse(const Duration(seconds: 30));
+        replyOn(opened.single, lastOn(opened.single), <String, dynamic>{});
+        async.elapse(const Duration(seconds: 15));
+
+        expect(sut.status, ConnectionStatus.connected);
+        expect(opened, hasLength(1));
+        sut.dispose().ignore();
+        async.flushMicrotasks();
+      });
+    });
+
+    test(
+      'a push that times out probes the connection, and silence reconnects',
+      () {
+        fakeAsync((FakeAsync async) {
+          joined(async);
+
+          sut.setStatus('online').ignore();
+          async.elapse(const Duration(seconds: 6));
+          expect(lastOn(opened.single)[3], 'heartbeat');
+
+          async.elapse(const Duration(seconds: 11));
+
+          expect(sut.status, isNot(ConnectionStatus.connected));
+          sut.dispose().ignore();
+          async.flushMicrotasks();
+        });
+      },
+    );
+  });
 }

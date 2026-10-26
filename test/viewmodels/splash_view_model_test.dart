@@ -52,6 +52,17 @@ void main() {
     return route;
   }
 
+  test(
+    'a session identity cannot renew for this build asks for an update, and keeps it',
+    () {
+      expect(
+        routeAfterSplash(const Err<DriverProfile>(AppUpdateRequiredFailure())),
+        isA<UpdateRequiredRoute>(),
+      );
+      verifyNever(() => session.logout());
+    },
+  );
+
   test('no stored session routes to Login', () {
     expect(routeAfterSplash(null), isA<LoginRoute>());
   });

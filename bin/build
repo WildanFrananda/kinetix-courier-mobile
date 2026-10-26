@@ -17,6 +17,12 @@ case $target in
   *) usage ;;
 esac
 
+case $environment in
+  production) mode=--release ;;
+  lab) mode=--debug ;;
+  *) usage ;;
+esac
+
 root=$(cd "$(dirname "$0")/.." && pwd)
 defines="$root/dart_defines/$environment.json"
 
@@ -26,4 +32,4 @@ if [[ ! -f $defines ]]; then
 fi
 
 cd "$root"
-exec fvm flutter build "$target" --release --dart-define-from-file="$defines" "$@"
+exec fvm flutter build "$target" "$mode" --dart-define-from-file="$defines" "$@"

@@ -9,3 +9,7 @@ class SessionSignedOut extends SessionEnd {
 class SessionNotApproved extends SessionEnd {
   const SessionNotApproved();
 }
+
+class SessionUpdateRequired extends SessionEnd {
+  const SessionUpdateRequired();
+}

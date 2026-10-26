@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:fleet_pulse_mobile/core/core.dart';
+import 'package:fleet_pulse_mobile/mixins/sign_in_delay_mixin.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
 import 'package:fleet_pulse_mobile/routes/app_route.dart';
@@ -9,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
 
 @injectable
-class RegisterViewModel extends ChangeNotifier {
+class RegisterViewModel extends ChangeNotifier with SignInDelayMixin {
   RegisterViewModel(this._router, this._session);
 
   static const int minPasswordLength = 12;
@@ -37,7 +38,7 @@ class RegisterViewModel extends ChangeNotifier {
   String? _successMessage;
 
   bool get submitting => _submitting;
-  String? get error => _error;
+  String? get error => delayMessage ?? _error;
   String? get successMessage => _successMessage;
 
   void setEmail(String v) => _email = v.trim();
@@ -48,6 +49,10 @@ class RegisterViewModel extends ChangeNotifier {
   void setCapacityKg(String v) => _capacity = v.trim();
 
   Future<void> submit() async {
+    if (_submitting || delayed) {
+      return;
+    }
+
     final String? problem = _problem();
 
     if (problem != null) {
@@ -71,24 +76,37 @@ class RegisterViewModel extends ChangeNotifier {
       capacityKg: int.parse(_capacity),
     );
 
-    res.fold(
-      (DriverSession _) {
-        _submitting = false;
-        _successMessage =
-            'Registration received. An administrator will approve your account.';
-        notifyListeners();
-        _router.replaceAll(const PendingApprovalRoute());
-      },
-      (Failure f) {
-        _error = f.message;
-        _submitting = false;
-        notifyListeners();
-      },
-    );
+    res.fold((DriverSession _) {
+      _submitting = false;
+      _successMessage =
+          'Registration received. An administrator will approve your account.';
+      notifyListeners();
+      _router.replaceAll(const PendingApprovalRoute());
+    }, _refused);
   }
 
   void backToLogin() {
     _router.pop();
+  }
+
+  void _refused(Failure f) {
+    _submitting = false;
+
+    if (f is AppUpdateRequiredFailure) {
+      notifyListeners();
+      _router.replaceAll(const UpdateRequiredRoute());
+
+      return;
+    }
+
+    if (f is SignInDelayedFailure) {
+      _error = null;
+      delayFor(f.wait);
+    } else {
+      _error = f.message;
+    }
+
+    notifyListeners();
   }
 
   String? _problem() {

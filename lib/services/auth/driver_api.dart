@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' hide Headers;
 import 'package:fleet_pulse_mobile/config/app_config.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:retrofit/retrofit.dart';
@@ -10,18 +10,32 @@ abstract class DriverApi {
   factory DriverApi(Dio dio, {String baseUrl}) = _DriverApi;
 
   @POST('${AppConfig.couriersPath}/register')
-  Future<CourierRegistrationResponse> registerCourier(
+  @Headers(<String, dynamic>{AppConfig.clientHeader: AppConfig.clientName})
+  Future<dynamic> registerCourier(
+    @Header(AppConfig.clientProofHeader) String proof,
     @Body() RegisterCourierRequest body,
   );
 
   @POST('${AppConfig.authPath}/login')
-  Future<dynamic> login(@Body() LoginRequest body);
+  @Headers(<String, dynamic>{AppConfig.clientHeader: AppConfig.clientName})
+  Future<dynamic> login(
+    @Header(AppConfig.clientProofHeader) String proof,
+    @Body() LoginRequest body,
+  );
 
   @POST('${AppConfig.authPath}/2fa/verify')
-  Future<SessionResponse> verifyTwoFactor(@Body() TwoFactorVerifyRequest body);
+  @Headers(<String, dynamic>{AppConfig.clientHeader: AppConfig.clientName})
+  Future<dynamic> verifyTwoFactor(
+    @Header(AppConfig.clientProofHeader) String proof,
+    @Body() TwoFactorVerifyRequest body,
+  );
 
   @POST('${AppConfig.authPath}/refresh')
-  Future<SessionResponse> refresh(@Body() RefreshRequest body);
+  @Headers(<String, dynamic>{AppConfig.clientHeader: AppConfig.clientName})
+  Future<dynamic> refresh(
+    @Header(AppConfig.clientProofHeader) String proof,
+    @Body() RefreshRequest body,
+  );
 
   @POST('${AppConfig.authPath}/logout')
   Future<void> logout(
@@ -30,7 +44,5 @@ abstract class DriverApi {
   );
 
   @GET('${AppConfig.matchingPath}/driver/me')
-  Future<DriverProfileEnvelope> me(
-    @Header('Authorization') String authorization,
-  );
+  Future<dynamic> me(@Header('Authorization') String authorization);
 }

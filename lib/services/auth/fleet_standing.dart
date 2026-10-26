@@ -3,6 +3,7 @@ import 'dart:io' show HttpStatus;
 import 'package:dio/dio.dart';
 import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
+import 'package:fleet_pulse_mobile/services/auth/answer_parser.dart';
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
 import 'package:injectable/injectable.dart';
 
@@ -11,21 +12,31 @@ class FleetStanding {
   FleetStanding(this._api);
 
   static const String _pendingApproval = 'pending_approval';
+  static const String _unreadable =
+      'The fleet answered in a way this app cannot read. Try again shortly.';
 
   final DriverApi _api;
 
   Future<Result<DriverProfile>> check(String accessToken) async {
-    try {
-      final DriverProfileEnvelope envelope = await _api.me(
-        'Bearer $accessToken',
-      );
+    final Object? raw;
 
-      return new Ok<DriverProfile>(envelope.data);
+    try {
+      raw = await _api.me('Bearer $accessToken');
     } on DioException catch (e) {
       return new Err<DriverProfile>(_refusal(e.response));
     } on Object {
       return const Err<DriverProfile>(NetworkFailure());
     }
+
+    final DriverProfileEnvelope? envelope = AnswerParser.parse(
+      raw,
+      DriverProfileEnvelope.fromJson,
+      from: 'matching',
+    );
+
+    return envelope == null
+        ? const Err<DriverProfile>(UnreadableAnswerFailure(_unreadable))
+        : new Ok<DriverProfile>(envelope.data);
   }
 
   Failure _refusal(Response<dynamic>? response) {

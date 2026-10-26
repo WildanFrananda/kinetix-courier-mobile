@@ -142,7 +142,7 @@ class _OrderView extends StatelessWidget {
                     if (signatureBytes != null && signatureBytes.isNotEmpty) {
                       final String base64Sig =
                           'data:image/png;base64,${base64Encode(signatureBytes)}';
-                      vm.setPodSignature(base64Sig);
+                      await vm.setPodSignature(base64Sig);
                     }
                   },
                 ),

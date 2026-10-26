@@ -6,7 +6,7 @@ import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
+import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
 import 'package:fleet_pulse_mobile/services/location/location_service.dart';
 import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart';
 import 'package:geolocator/geolocator.dart';
@@ -28,6 +28,7 @@ class DutyRepositoryImpl implements DutyRepository {
   static const Duration batchRetryMax = Duration(minutes: 5);
   static const Duration offlineMaxAge = Duration(hours: 24);
   static const int _maxBackoffDoublings = 6;
+  static const String _clockAhead = 'ahead_of_server_clock';
 
   final LocationService _location;
   final ChannelClient _channel;
@@ -47,6 +48,7 @@ class DutyRepositoryImpl implements DutyRepository {
   Position? _latest;
   Position? _lastRecorded;
   DateTime? _pausedUntil;
+  DriverId? _owner;
   bool _onDuty = false;
   bool _declaredOnDuty = false;
   bool _declaring = false;
@@ -76,6 +78,12 @@ class DutyRepositoryImpl implements DutyRepository {
       return _declareOnDuty();
     }
 
+    final DriverId? owner = _channel.driverId;
+
+    if (owner == null) {
+      return const Err<DriverAvailability>(NetworkFailure());
+    }
+
     final LocationPermissionStatus permission = await _location
         .ensurePermission(background: true);
 
@@ -86,6 +94,7 @@ class DutyRepositoryImpl implements DutyRepository {
     }
 
     await _location.requestNotificationPermission();
+    _owner = owner;
     _startTracking();
     _onDuty = true;
 
@@ -228,6 +237,7 @@ class DutyRepositoryImpl implements DutyRepository {
     _latest = null;
     _lastRecorded = null;
     _pausedUntil = null;
+    _owner = null;
     _declaredOnDuty = false;
     _announcePending = false;
   }
@@ -250,25 +260,32 @@ class DutyRepositoryImpl implements DutyRepository {
       await _reannounce();
     }
 
+    _endPauseIfOver();
+
     final Position? position = _latest;
 
     if (position == null || !_movedSinceRecorded(position)) {
       return;
     }
 
-    if (!_joined || !_declaredOnDuty) {
+    if (!_joined || !_declaredOnDuty || _pausedUntil != null) {
       await _queue(position);
 
       return;
     }
 
+    await _send(position);
+  }
+
+  void _endPauseIfOver() {
     final DateTime? pausedUntil = _pausedUntil;
 
-    if (pausedUntil != null && clock.now().isBefore(pausedUntil)) {
+    if (pausedUntil == null || clock.now().isBefore(pausedUntil)) {
       return;
     }
 
-    await _send(position);
+    _pausedUntil = null;
+    _lastRecorded = null;
   }
 
   bool get _joined => _channel.status == ConnectionStatus.connected;
@@ -316,8 +333,16 @@ class DutyRepositoryImpl implements DutyRepository {
   Future<void> _queue(Position position) async {
     _lastRecorded = position;
 
+    final DriverId? owner = _owner;
+
+    if (owner == null) {
+      AppLogger.debug('a position with no courier on duty was not kept');
+
+      return;
+    }
+
     try {
-      await _offline.add(_pingOf(position));
+      await _offline.add(owner, _pingOf(position));
     } on Object catch (e) {
       AppLogger.error(
         'a position recorded offline could not be kept',
@@ -353,13 +378,19 @@ class DutyRepositoryImpl implements DutyRepository {
   }
 
   Future<Duration?> _sendBatch() async {
+    final DriverId? driver = _channel.driverId;
+
+    if (driver == null) {
+      return null;
+    }
+
     final List<TelemetryPing> batch;
 
     try {
       await _offline.discardRecordedBefore(
         clock.now().toUtc().subtract(offlineMaxAge),
       );
-      batch = await _offline.oldest(batchSize);
+      batch = await _offline.oldest(driver, batchSize);
     } on Object catch (e) {
       AppLogger.error('the offline positions could not be read', error: e);
 
@@ -375,7 +406,7 @@ class DutyRepositoryImpl implements DutyRepository {
     final ChannelReply reply;
 
     try {
-      reply = await _channel.pingBatch(batch);
+      reply = await _channel.pingBatch(driver, batch);
     } on Object catch (e) {
       AppLogger.debug('offline positions not delivered: $e');
 
@@ -391,7 +422,7 @@ class DutyRepositoryImpl implements DutyRepository {
     }
 
     try {
-      await _offline.remove(batch);
+      await _offline.remove(driver, batch);
     } on Object catch (e) {
       AppLogger.error(
         'settled offline positions could not be removed',
@@ -399,9 +430,39 @@ class DutyRepositoryImpl implements DutyRepository {
       );
     }
 
+    _reportRefused(reply);
     _flushFailures = 0;
 
     return batchSpacing;
+  }
+
+  void _reportRefused(ChannelReply reply) {
+    final Object? refused = reply.response['refused'];
+
+    if (refused is! List<dynamic>) {
+      return;
+    }
+
+    final Map<String, int> reasons = <String, int>{};
+
+    for (final Object? entry in refused) {
+      final Object? reason = entry is Map<dynamic, dynamic>
+          ? entry['reason']
+          : null;
+      final String named = reason is String ? reason : 'unknown';
+
+      reasons[named] = (reasons[named] ?? 0) + 1;
+    }
+
+    if (reasons.isEmpty) {
+      return;
+    }
+
+    AppLogger.error('matching refused offline positions for good: $reasons');
+
+    if (reasons.containsKey(_clockAhead)) {
+      _emit(_problemsCtrl, const ChannelFailure(_clockAhead));
+    }
   }
 
   Duration _batchBackoff() {

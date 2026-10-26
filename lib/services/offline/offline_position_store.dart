@@ -1,3 +1,5 @@
+import 'package:fleet_pulse_mobile/core/app_logger.dart';
+import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -18,6 +20,7 @@ class OfflinePositionStore {
   static const String boxName = 'offline_positions';
   static const int defaultCapacity = 21600;
   static const int _keyDigits = 17;
+  static const String _ownerSeparator = ':';
 
   static const String _fLatitude = 'latitude';
   static const String _fLongitude = 'longitude';
@@ -42,23 +45,25 @@ class OfflinePositionStore {
     return box.length;
   }
 
-  Future<void> add(TelemetryPing ping) async {
+  Future<void> add(DriverId owner, TelemetryPing ping) async {
     final LazyBox<Map<dynamic, dynamic>> box = await _opened();
 
-    await box.put(_keyOf(ping.recordedAt), _encode(ping));
+    await box.put(_keyOf(owner, ping.recordedAt), _encode(ping));
 
     final int excess = box.length - capacity;
 
     if (excess > 0) {
-      await box.deleteAll(_sortedKeys(box).take(excess));
+      await box.deleteAll(
+        _oldestFirst(box.keys.whereType<String>()).take(excess),
+      );
     }
   }
 
-  Future<List<TelemetryPing>> oldest(int limit) async {
+  Future<List<TelemetryPing>> oldest(DriverId owner, int limit) async {
     final LazyBox<Map<dynamic, dynamic>> box = await _opened();
     final List<TelemetryPing> pings = <TelemetryPing>[];
 
-    for (final String key in _sortedKeys(box).take(limit)) {
+    for (final String key in _keysOf(box, owner).take(limit)) {
       final Map<dynamic, dynamic>? raw = await box.get(key);
       final TelemetryPing? ping = raw == null ? null : _decode(raw);
 
@@ -72,20 +77,21 @@ class OfflinePositionStore {
     return pings;
   }
 
-  Future<void> remove(Iterable<TelemetryPing> pings) async {
+  Future<void> remove(DriverId owner, Iterable<TelemetryPing> pings) async {
     final LazyBox<Map<dynamic, dynamic>> box = await _opened();
 
     await box.deleteAll(<String>[
-      for (final TelemetryPing ping in pings) _keyOf(ping.recordedAt),
+      for (final TelemetryPing ping in pings) _keyOf(owner, ping.recordedAt),
     ]);
   }
 
   Future<int> discardRecordedBefore(DateTime cutoff) async {
     final LazyBox<Map<dynamic, dynamic>> box = await _opened();
-    final String limit = _keyOf(cutoff);
-    final List<String> stale = _sortedKeys(
-      box,
-    ).takeWhile((String key) => key.compareTo(limit) < 0).toList();
+    final String limit = _moment(cutoff);
+    final List<String> stale = <String>[
+      for (final String key in box.keys.whereType<String>())
+        if ((_momentOf(key) ?? '').compareTo(limit) < 0) key,
+    ];
 
     await box.deleteAll(stale);
 
@@ -99,7 +105,9 @@ class OfflinePositionStore {
       return opening;
     }
 
-    final Future<LazyBox<Map<dynamic, dynamic>>> fresh = _open();
+    final Future<LazyBox<Map<dynamic, dynamic>>> fresh = _open().then(
+      _withoutOrphans,
+    );
 
     _box = fresh;
 
@@ -111,15 +119,64 @@ class OfflinePositionStore {
     }
   }
 
-  List<String> _sortedKeys(LazyBox<Map<dynamic, dynamic>> box) {
-    return box.keys.whereType<String>().toList()..sort();
+  Future<LazyBox<Map<dynamic, dynamic>>> _withoutOrphans(
+    LazyBox<Map<dynamic, dynamic>> box,
+  ) async {
+    final List<dynamic> orphans = <dynamic>[
+      for (final dynamic key in box.keys)
+        if (key is! String || _momentOf(key) == null) key,
+    ];
+
+    if (orphans.isNotEmpty) {
+      AppLogger.error(
+        'dropped ${orphans.length} offline positions kept without a courier',
+      );
+      await box.deleteAll(orphans);
+    }
+
+    return box;
   }
 
-  String _keyOf(DateTime at) {
+  List<String> _keysOf(LazyBox<Map<dynamic, dynamic>> box, DriverId owner) {
+    final String prefix = '${owner.value}$_ownerSeparator';
+
+    return box.keys
+        .whereType<String>()
+        .where((String key) => key.startsWith(prefix))
+        .toList()
+      ..sort();
+  }
+
+  List<String> _oldestFirst(Iterable<String> keys) {
+    return keys.toList()..sort(
+      (String a, String b) =>
+          (_momentOf(a) ?? '').compareTo(_momentOf(b) ?? ''),
+    );
+  }
+
+  String _keyOf(DriverId owner, DateTime at) {
+    return '${owner.value}$_ownerSeparator${_moment(at)}';
+  }
+
+  String _moment(DateTime at) {
     return at.toUtc().microsecondsSinceEpoch.toString().padLeft(
       _keyDigits,
       '0',
     );
+  }
+
+  String? _momentOf(String key) {
+    final int separator = key.indexOf(_ownerSeparator);
+
+    if (separator <= 0 || int.tryParse(key.substring(0, separator)) == null) {
+      return null;
+    }
+
+    final String moment = key.substring(separator + 1);
+
+    return moment.length == _keyDigits && int.tryParse(moment) != null
+        ? moment
+        : null;
   }
 
   Map<String, Object?> _encode(TelemetryPing ping) {
