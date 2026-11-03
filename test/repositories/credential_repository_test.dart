@@ -355,7 +355,7 @@ void main() {
 
         expect(
           value.link.toString(),
-          'https://verify.example/seal/answer#CgsM',
+          'https://verify.example/seal/answer#$challenge.CgsM',
         );
         expect(value.frames.single, startsWith('KSP1:'));
         expect(presentation['leafIndex'], '7');

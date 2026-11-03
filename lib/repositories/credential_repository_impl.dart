@@ -343,7 +343,11 @@ class CredentialRepositoryImpl implements CredentialRepository {
       return new Ok<PresentedAnswer>(
         new PresentedAnswer(
           frames: PresentationFrames.of(transaction),
-          link: PresentationFrames.link(offer.answerUrl, transaction),
+          link: PresentationFrames.link(
+            offer.answerUrl,
+            offer.challenge,
+            transaction,
+          ),
         ),
       );
     } on HolderRuntimeException {

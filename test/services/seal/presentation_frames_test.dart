@@ -28,14 +28,18 @@ void main() {
   });
 
   test(
-    'puts the presentation in the link fragment, which no browser sends to a server',
+    'puts the challenge and the presentation in the link fragment, which no browser sends to a server',
     () {
       final Uri link = PresentationFrames.link(
         Uri.parse('https://verify.example/seal/answer'),
+        'c0' * 32,
         '0a0b0c',
       );
 
-      expect(link.toString(), 'https://verify.example/seal/answer#CgsM');
+      expect(
+        link.toString(),
+        'https://verify.example/seal/answer#${'c0' * 32}.CgsM',
+      );
       expect(link.query, isEmpty);
     },
   );

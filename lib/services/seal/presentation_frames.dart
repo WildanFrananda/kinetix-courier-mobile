@@ -26,8 +26,8 @@ abstract final class PresentationFrames {
     });
   }
 
-  static Uri link(Uri answerUrl, String transactionHex) {
-    return answerUrl.replace(fragment: encoded(transactionHex));
+  static Uri link(Uri answerUrl, String challenge, String transactionHex) {
+    return answerUrl.replace(fragment: '$challenge.${encoded(transactionHex)}');
   }
 
   static Uint8List _bytes(String hex) {

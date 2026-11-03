@@ -523,8 +523,9 @@ verifier only that it meets the verifier's minimums (infra `docs/SEAL-SERVICE.md
   seal's public list. The proof takes about a minute on an entry-level phone; `ScreenWake` keeps the screen on.
 - **The answer** (a bound transaction of about 3.6 KB, valid for an hour) goes to the verifier, never to seal:
   in person as frames `KSP1:<first 8 hex of its SHA-256>:<i>/<n>:<600 base64url characters>`, cycled every 250 ms in
-  one QR; remotely as the link `<a>#<base64url transaction>` through the share sheet, the transaction in the fragment,
-  which no browser sends to a server (`PresentationFrames`).
+  one QR; remotely as the link `<a>#<challenge>.<base64url transaction>` through the share sheet, both in the
+  fragment, which no browser sends to a server: the verifier's page uses the challenge to match the answer to the
+  request it made (`PresentationFrames`).
 - **Packages**, all BSD-3 and at least two weeks old when added (2026-11-03): `webview_flutter` 4.14.1,
   `mobile_scanner` 7.4.2, `qr_flutter` 4.1.0 with `qr` pinned to 3.0.2 (3.0.3 was five days old), `share_plus`
   13.3.1, `wakelock_plus` 1.7.0 (1.8 needs `dbus` 0.8, which `geolocator_linux` refuses); test only:
