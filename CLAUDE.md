@@ -496,3 +496,37 @@ for you", not "Order cancelled", which both used to show).
 `DutyRepository` declare `dispose()`. At `ed533f7` `ConnectionRepository` did not, and the generated container,
 which neither `flutter analyze` (it skips `*.config.dart`) nor the unit tests compiled, broke every build of the
 app. `test/di/injection_test.dart` builds the container in the unit suite.
+
+### Showing a credential (seal, S1f)
+
+The courier holds a credential of their own deliveries, rating and days active, issued by seal, and shows a
+verifier only that it meets the verifier's minimums (infra `docs/SEAL-SERVICE.md`, SEAL-D8, D9, D16, D18).
+
+- **The proof runs on the phone, in seal's holder runtime.** `HolderRuntime` loads seal's page
+  (`/api/v1/seal/holder/<digest>/index.html`) into a `WebViewController` and talks to it through the JavaScript
+  channel `SealHolderBridge`: `sealHolder.<method>(id, …)` in, `{ id, ok, … }` back (`HolderAnswers` pairs them).
+  `webview_flutter` has no headless mode, so `HolderRuntimeView` puts the WebView in the tree at 1×1 px on the two
+  screens that use it. The screens stay Flutter's. `flutter_inappwebview` (headless) was not taken: its last release
+  was 2024-10.
+- **The holder secret** is 32 random bytes in `flutter_secure_storage` (`HolderVault`), made on first use and never
+  sent anywhere: seal receives only `holderPublicKey(secret)`, computed in the runtime (SEAL-D16's default). A lost
+  phone means asking for a new credential.
+- **Nothing calls seal while presenting** (SEAL-D18: the verifier relays, so seal must not see this phone at that
+  moment). The registry snapshot, the approved predicates and the runtime's entry are fetched by the credential
+  screen at most every six hours (`refreshPublicState`), and `offerFor`/`present` read only those copies; a proof
+  against an older registry root still lands. A request whose predicate this phone does not know is refused
+  (`unknown_predicate`) rather than fetched on the spot. `test/repositories/credential_repository_test.dart` checks
+  that `present` touches `SealApi` not at all.
+- **The verifier's request** is a QR code `kinetix-seal:present?v=1&r=<registry>&p=<predicate row id>&c=<challenge>&a=<answer URL>`.
+  The app scans it with `mobile_scanner`, refuses anything else, an `a` that is not `https`, another registry, or an
+  unknown row, and shows the courier, before any proof, the predicate's label and minimums from its own copy of
+  seal's public list. The proof takes about a minute on an entry-level phone; `ScreenWake` keeps the screen on.
+- **The answer** (a bound transaction of about 3.6 KB, valid for an hour) goes to the verifier, never to seal:
+  in person as frames `KSP1:<first 8 hex of its SHA-256>:<i>/<n>:<600 base64url characters>`, cycled every 250 ms in
+  one QR; remotely as the link `<a>#<base64url transaction>` through the share sheet, the transaction in the fragment,
+  which no browser sends to a server (`PresentationFrames`).
+- **Packages**, all BSD-3 and at least two weeks old when added (2026-11-03): `webview_flutter` 4.14.1,
+  `mobile_scanner` 7.4.2, `qr_flutter` 4.1.0 with `qr` pinned to 3.0.2 (3.0.3 was five days old), `share_plus`
+  13.3.1, `wakelock_plus` 1.7.0 (1.8 needs `dbus` 0.8, which `geolocator_linux` refuses); test only:
+  `webview_flutter_platform_interface` 2.15.1, for `test/ui/fake_web_view_platform.dart`.
+

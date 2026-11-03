@@ -1,16 +1,20 @@
 import 'package:fleet_pulse_mobile/di/injection.dart';
 import 'package:fleet_pulse_mobile/models/order.dart';
 import 'package:fleet_pulse_mobile/routes/app_route.dart';
+import 'package:fleet_pulse_mobile/ui/screens/credential_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/login_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/order_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/pending_approval_screen.dart';
+import 'package:fleet_pulse_mobile/ui/screens/present_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/register_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/splash_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/tracking_screen.dart';
 import 'package:fleet_pulse_mobile/ui/screens/update_required_screen.dart';
+import 'package:fleet_pulse_mobile/viewmodels/credential_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/pending_approval_view_model.dart';
+import 'package:fleet_pulse_mobile/viewmodels/present_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/register_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/splash_view_model.dart';
 import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
@@ -46,6 +50,14 @@ class AppRouteMapper {
       TrackingRoute() => MaterialPage<void>(
         key: const ValueKey<String>('tracking'),
         child: _inject<TrackingViewModel>(const TrackingScreen()),
+      ),
+      CredentialRoute() => MaterialPage<void>(
+        key: const ValueKey<String>('credential'),
+        child: _inject<CredentialViewModel>(const CredentialScreen()),
+      ),
+      PresentRoute() => MaterialPage<void>(
+        key: const ValueKey<String>('present'),
+        child: _inject<PresentViewModel>(const PresentScreen()),
       ),
       OrderRoute(:final Order order) => MaterialPage<void>(
         key: ValueKey<String>('order-${order.id}'),

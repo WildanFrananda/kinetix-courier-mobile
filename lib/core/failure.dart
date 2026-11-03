@@ -162,3 +162,38 @@ class AppUpdateRequiredFailure extends Failure {
 
 Failure failureFromReason(String? reason) =>
     new ChannelFailure(reason ?? 'unknown');
+
+class CredentialFailure extends Failure {
+  const CredentialFailure(this.reason);
+
+  static const Map<String, String> _explanations = <String, String>{
+    'NO_DELIVERIES': 'A credential needs at least one delivered job.',
+    'ISSUED_TODAY':
+        'A credential was already issued today on another phone. Try again '
+        'tomorrow.',
+    'FACTS_UNAVAILABLE':
+        'Your deliveries and ratings are being updated. Try again in a minute.',
+    'COURIER_REQUIRED': 'Only a courier account holds a courier credential.',
+    'REGISTRY_UNAVAILABLE':
+        'Credentials cannot be checked now. Try again later.',
+    'not_issued_yet':
+        'Your credential is still being issued. It is usually ready within a '
+        'minute.',
+    'no_credential': 'Ask for your credential first.',
+    'not_a_request': 'That code is not a request to show a credential.',
+    'other_registry':
+        'That request is for credentials this app does not hold. Ask the '
+        'verifier for a new code.',
+    'unknown_predicate':
+        'That request asks for something this phone does not know yet. Open '
+        'the credential screen to update it, then scan again.',
+    'insecure_answer':
+        'That request does not say where to send the answer safely.',
+    'holder_failed': 'The credential could not be shown. Try again.',
+  };
+
+  final String reason;
+
+  @override
+  String get message => _explanations[reason] ?? reason;
+}

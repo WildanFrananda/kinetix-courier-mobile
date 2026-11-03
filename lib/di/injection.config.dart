@@ -16,6 +16,10 @@ import 'package:fleet_pulse_mobile/repositories/connection_repository.dart'
     as _i891;
 import 'package:fleet_pulse_mobile/repositories/connection_repository_impl.dart'
     as _i458;
+import 'package:fleet_pulse_mobile/repositories/credential_repository.dart'
+    as _i522;
+import 'package:fleet_pulse_mobile/repositories/credential_repository_impl.dart'
+    as _i709;
 import 'package:fleet_pulse_mobile/repositories/duty_repository.dart' as _i757;
 import 'package:fleet_pulse_mobile/repositories/duty_repository_impl.dart'
     as _i676;
@@ -39,18 +43,26 @@ import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart' as _i246;
 import 'package:fleet_pulse_mobile/services/auth/token_store.dart' as _i996;
 import 'package:fleet_pulse_mobile/services/channel/channel_client.dart'
     as _i700;
+import 'package:fleet_pulse_mobile/services/device/screen_wake.dart' as _i445;
+import 'package:fleet_pulse_mobile/services/device/share_sheet.dart' as _i128;
 import 'package:fleet_pulse_mobile/services/location/location_service.dart'
     as _i826;
 import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart'
     as _i776;
+import 'package:fleet_pulse_mobile/services/seal/holder_runtime.dart' as _i602;
+import 'package:fleet_pulse_mobile/services/seal/holder_vault.dart' as _i865;
+import 'package:fleet_pulse_mobile/services/seal/seal_api.dart' as _i232;
 import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart'
     as _i465;
 import 'package:fleet_pulse_mobile/services/storage/proof_draft_store.dart'
     as _i726;
+import 'package:fleet_pulse_mobile/viewmodels/credential_view_model.dart'
+    as _i164;
 import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart' as _i598;
 import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart' as _i962;
 import 'package:fleet_pulse_mobile/viewmodels/pending_approval_view_model.dart'
     as _i68;
+import 'package:fleet_pulse_mobile/viewmodels/present_view_model.dart' as _i787;
 import 'package:fleet_pulse_mobile/viewmodels/register_view_model.dart'
     as _i561;
 import 'package:fleet_pulse_mobile/viewmodels/splash_view_model.dart' as _i580;
@@ -80,10 +92,13 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i700.ChannelClient(),
       dispose: (i) => i.dispose(),
     );
+    gh.lazySingleton<_i445.ScreenWake>(() => _i445.ScreenWake());
+    gh.lazySingleton<_i128.ShareSheet>(() => _i128.ShareSheet());
     gh.lazySingleton<_i826.LocationService>(() => _i826.LocationService());
     gh.lazySingleton<_i776.OfflinePositionStore>(
       () => _i776.OfflinePositionStore(),
     );
+    gh.lazySingleton<_i602.HolderRuntime>(() => _i602.HolderRuntime());
     gh.lazySingleton<_i726.ProofDraftStore>(() => _i726.ProofDraftStore());
     gh.lazySingleton<_i757.DutyRepository>(
       () => _i676.DutyRepositoryImpl(
@@ -100,6 +115,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i996.TokenStore>(
       () => _i996.TokenStore(gh<_i558.FlutterSecureStorage>()),
     );
+    gh.lazySingleton<_i865.HolderVault>(
+      () => _i865.HolderVault(gh<_i558.FlutterSecureStorage>()),
+    );
     gh.lazySingleton<_i465.PodPhotoUploader>(
       () => _i465.PodPhotoUploader(gh<_i361.Dio>(instanceName: 'storage')),
     );
@@ -115,6 +133,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i738.DriverApi>(
       () => registerModule.driverApi(gh<_i361.Dio>()),
+    );
+    gh.lazySingleton<_i232.SealApi>(
+      () => registerModule.sealApi(gh<_i361.Dio>()),
     );
     gh.factory<_i398.UpdateRequiredViewModel>(
       () => _i398.UpdateRequiredViewModel(gh<_i34.AppRouterState>()),
@@ -148,6 +169,15 @@ extension GetItInjectableX on _i174.GetIt {
       ),
       dispose: (i) => i.dispose(),
     );
+    gh.lazySingleton<_i522.CredentialRepository>(
+      () => _i709.CredentialRepositoryImpl(
+        gh<_i232.SealApi>(),
+        gh<_i996.TokenStore>(),
+        gh<_i246.SessionRenewer>(),
+        gh<_i865.HolderVault>(),
+        gh<_i602.HolderRuntime>(),
+      ),
+    );
     gh.lazySingleton<_i968.SessionRepository>(
       () => _i670.SessionRepositoryImpl(
         gh<_i738.DriverApi>(),
@@ -179,6 +209,22 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i580.SplashViewModel(
         gh<_i34.AppRouterState>(),
         gh<_i968.SessionRepository>(),
+      ),
+    );
+    gh.factory<_i164.CredentialViewModel>(
+      () => _i164.CredentialViewModel(
+        gh<_i34.AppRouterState>(),
+        gh<_i522.CredentialRepository>(),
+        gh<_i602.HolderRuntime>(),
+      ),
+    );
+    gh.factory<_i787.PresentViewModel>(
+      () => _i787.PresentViewModel(
+        gh<_i34.AppRouterState>(),
+        gh<_i522.CredentialRepository>(),
+        gh<_i602.HolderRuntime>(),
+        gh<_i445.ScreenWake>(),
+        gh<_i128.ShareSheet>(),
       ),
     );
     gh.factory<_i812.TrackingViewModel>(

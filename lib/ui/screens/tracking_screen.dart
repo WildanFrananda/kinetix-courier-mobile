@@ -20,6 +20,11 @@ class TrackingScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Tracking'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'My credential',
+            onPressed: vm.openCredential,
+            icon: const Icon(Icons.verified_outlined),
+          ),
           IconButton(onPressed: vm.logout, icon: const Icon(Icons.logout)),
         ],
       ),

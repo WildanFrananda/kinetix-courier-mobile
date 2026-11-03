@@ -48,6 +48,8 @@ abstract final class AppConfig {
 
   static const String authPath = '/api/v1/auth';
 
+  static const String sealPath = '/api/v1/seal';
+
   static const String couriersPath = '/api/v1/couriers';
 
   static const String matchingPath = '/api/v1/matching';

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:fleet_pulse_mobile/config/app_config.dart';
 import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
+import 'package:fleet_pulse_mobile/services/seal/seal_api.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 
@@ -28,6 +29,9 @@ abstract class RegisterModule {
 
   @lazySingleton
   DriverApi driverApi(Dio dio) => new DriverApi(dio);
+
+  @lazySingleton
+  SealApi sealApi(Dio dio) => new SealApi(dio);
 
   @lazySingleton
   FlutterSecureStorage get secureStorage => const FlutterSecureStorage();

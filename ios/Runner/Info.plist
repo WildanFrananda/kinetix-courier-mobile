@@ -48,7 +48,7 @@
 		</dict>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>FleetPulse takes a photo of each parcel you deliver as proof of delivery.</string>
+	<string>FleetPulse takes a photo of each parcel you deliver as proof of delivery, and scans the code a verifier shows you when you share your credential.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FleetPulse needs your location to share it with dispatch while on duty.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

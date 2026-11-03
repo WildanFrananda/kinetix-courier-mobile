@@ -189,4 +189,8 @@ class TrackingViewModel extends ChangeNotifier {
     unawaited(_endSub?.cancel());
     super.dispose();
   }
+
+  void openCredential() {
+    _router.push(const CredentialRoute());
+  }
 }

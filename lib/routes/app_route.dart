@@ -33,3 +33,11 @@ class OrderRoute extends AppRoute {
 
   final Order order;
 }
+
+class CredentialRoute extends AppRoute {
+  const CredentialRoute();
+}
+
+class PresentRoute extends AppRoute {
+  const PresentRoute();
+}
