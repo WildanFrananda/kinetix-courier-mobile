@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 
 abstract final class AppLogger {
-  static const String _name = 'FleetPulse';
+  static const String _name = 'KinetixCourier';
 
   static void debug(String message) {
     if (kDebugMode) {

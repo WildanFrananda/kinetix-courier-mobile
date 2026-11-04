@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
-import 'package:fleet_pulse_mobile/services/location/location_service.dart';
-import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/duty_repository.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_reply.dart';
+import 'package:kinetix_courier/services/location/location_service.dart';
+import 'package:kinetix_courier/services/offline/offline_position_store.dart';
 
 @LazySingleton(as: DutyRepository)
 class DutyRepositoryImpl implements DutyRepository {

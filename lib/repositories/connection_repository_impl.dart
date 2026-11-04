@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:fleet_pulse_mobile/config/app_config.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
-import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
-import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
-import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/config/app_config.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/connection_repository.dart';
+import 'package:kinetix_courier/services/auth/fleet_standing.dart';
+import 'package:kinetix_courier/services/auth/session_renewer.dart';
+import 'package:kinetix_courier/services/auth/token_store.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/state/session_end.dart';
 
 @LazySingleton(as: ConnectionRepository)
 class ConnectionRepositoryImpl implements ConnectionRepository {

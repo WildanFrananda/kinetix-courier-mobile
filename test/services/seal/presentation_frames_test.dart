@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:fleet_pulse_mobile/services/seal/presentation_frames.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/services/seal/presentation_frames.dart';
 
 void main() {
   final String transaction = List<String>.generate(

@@ -1,15 +1,15 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/connection_repository_impl.dart';
-import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
-import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
-import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/state/session_end.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/connection_repository_impl.dart';
+import 'package:kinetix_courier/services/auth/fleet_standing.dart';
+import 'package:kinetix_courier/services/auth/session_renewer.dart';
+import 'package:kinetix_courier/services/auth/token_store.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/state/session_end.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockChannel extends Mock implements ChannelClient {}

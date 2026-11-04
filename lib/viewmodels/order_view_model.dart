@@ -1,14 +1,14 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/maps/maps_launcher.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/state/job_update.dart';
-import 'package:fleet_pulse_mobile/state/order_ui_state.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart' hide Order;
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/maps/maps_launcher.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/order_repository.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/state/job_update.dart';
+import 'package:kinetix_courier/state/order_ui_state.dart';
 
 @injectable
 class OrderViewModel extends ChangeNotifier {

@@ -1,17 +1,17 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/credential_repository_impl.dart';
-import 'package:fleet_pulse_mobile/services/auth/session_renewer.dart';
-import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime_exception.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_vault.dart';
-import 'package:fleet_pulse_mobile/services/seal/seal_api.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/credential_repository_impl.dart';
+import 'package:kinetix_courier/services/auth/session_renewer.dart';
+import 'package:kinetix_courier/services/auth/token_store.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime_exception.dart';
+import 'package:kinetix_courier/services/seal/holder_vault.dart';
+import 'package:kinetix_courier/services/seal/seal_api.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockApi extends Mock implements SealApi {}

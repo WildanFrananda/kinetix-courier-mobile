@@ -1,9 +1,9 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:fleet_pulse_mobile/config/app_check_mode.dart';
-import 'package:fleet_pulse_mobile/config/app_config.dart';
-import 'package:fleet_pulse_mobile/core/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:kinetix_courier/config/app_check_mode.dart';
+import 'package:kinetix_courier/config/app_config.dart';
+import 'package:kinetix_courier/core/app_logger.dart';
 
 abstract final class AppCheckActivation {
   static FirebaseOptions optionsFor(

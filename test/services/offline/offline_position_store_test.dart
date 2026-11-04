@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
-import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
+import 'package:kinetix_courier/services/offline/offline_position_store.dart';
 
 void main() {
   final DateTime start = DateTime.utc(2026, 10, 21, 8);

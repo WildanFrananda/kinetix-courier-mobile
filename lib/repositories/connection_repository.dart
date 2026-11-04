@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/state/session_end.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/state/session_end.dart';
 
 abstract interface class ConnectionRepository {
   Stream<ConnectionStatus> get statusStream;

@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/mixins/retry_mixin.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/mixins/retry_mixin.dart';
 
 class _Retrier with RetryMixin {}
 

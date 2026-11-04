@@ -1,7 +1,7 @@
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
 
 @injectable
 class UpdateRequiredViewModel extends ChangeNotifier {

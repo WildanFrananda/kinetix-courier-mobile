@@ -1,6 +1,6 @@
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
 
 @singleton
 class AppRouterState extends ChangeNotifier {

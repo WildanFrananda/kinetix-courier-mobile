@@ -1,5 +1,5 @@
 # analysis_options.yaml
-# FleetPulse Driver — strict enterprise config.
+# Kinetix Courier — strict enterprise config.
 # Base: flutter_lints. Hardened for MVVM + freezed/injectable/json_serializable.
 
 include: package:flutter_lints/flutter.yaml

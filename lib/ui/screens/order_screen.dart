@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/state/order_ui_state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/state/order_ui_state.dart';
+import 'package:kinetix_courier/viewmodels/order_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 

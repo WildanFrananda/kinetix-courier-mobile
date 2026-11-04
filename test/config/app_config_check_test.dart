@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleet_pulse_mobile/config/app_config_check.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/config/app_config_check.dart';
 
 void main() {
   const Map<String, String> firebase = <String, String>{

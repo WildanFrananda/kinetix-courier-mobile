@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:fleet_pulse_mobile/services/seal/holder_answers.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime_exception.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/services/seal/holder_answers.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime_exception.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 @lazySingleton

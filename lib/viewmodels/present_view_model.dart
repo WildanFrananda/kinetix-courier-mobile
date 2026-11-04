@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/credential_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/services/device/screen_wake.dart';
-import 'package:fleet_pulse_mobile/services/device/share_sheet.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime.dart';
-import 'package:fleet_pulse_mobile/state/present_ui_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/credential_repository.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/services/device/screen_wake.dart';
+import 'package:kinetix_courier/services/device/share_sheet.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime.dart';
+import 'package:kinetix_courier/state/present_ui_state.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 @injectable

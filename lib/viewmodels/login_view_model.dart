@@ -1,13 +1,13 @@
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/mixins/sign_in_delay_mixin.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/state/login_outcome.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/mixins/sign_in_delay_mixin.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/state/login_outcome.dart';
 
 @injectable
 class LoginViewModel extends ChangeNotifier with SignInDelayMixin {

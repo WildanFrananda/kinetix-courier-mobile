@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime_exception.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime_exception.dart';
 
 class HolderAnswers {
   final Map<String, Completer<Map<String, String>>> _pending =

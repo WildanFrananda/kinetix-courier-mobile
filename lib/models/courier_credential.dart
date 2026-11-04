@@ -1,6 +1,6 @@
-import 'package:fleet_pulse_mobile/models/credential_placement.dart';
-import 'package:fleet_pulse_mobile/models/credential_standing.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:kinetix_courier/models/credential_placement.dart';
+import 'package:kinetix_courier/models/credential_standing.dart';
 
 part 'courier_credential.freezed.dart';
 

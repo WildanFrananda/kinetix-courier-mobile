@@ -1,7 +1,7 @@
-import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/models/models.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 
 @lazySingleton
@@ -68,7 +68,7 @@ class LocationService {
       accuracy: LocationAccuracy.medium,
       intervalDuration: _interval,
       foregroundNotificationConfig: const ForegroundNotificationConfig(
-        notificationTitle: 'FleetPulse is on duty',
+        notificationTitle: 'Kinetix Courier is on duty',
         notificationText: 'Sharing your location with dispatch while on duty',
         notificationChannelName: 'Duty tracking',
         enableWakeLock: true,

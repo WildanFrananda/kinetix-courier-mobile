@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/services/seal/holder_answers.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/services/seal/holder_answers.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime_exception.dart';
 
 void main() {
   test('is ready once the page says so, and again after a restart', () async {

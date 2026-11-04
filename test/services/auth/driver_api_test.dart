@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
 
 class _Recorder implements HttpClientAdapter {
   final List<RequestOptions> requests = <RequestOptions>[];

@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
 
 void main() {
   const String token =

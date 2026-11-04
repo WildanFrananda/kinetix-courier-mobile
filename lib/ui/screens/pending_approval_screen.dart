@@ -1,6 +1,6 @@
-import 'package:fleet_pulse_mobile/state/approval_check_state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/pending_approval_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/state/approval_check_state.dart';
+import 'package:kinetix_courier/viewmodels/pending_approval_view_model.dart';
 import 'package:provider/provider.dart';
 
 class PendingApprovalScreen extends StatelessWidget {

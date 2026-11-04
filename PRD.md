@@ -1,4 +1,4 @@
-# Product Requirement Document (PRD): FleetPulse Driver App
+# Product Requirement Document (PRD): Kinetix Courier App
 
 **The courier-facing mobile client of the Kinetix fleet (`kinetix-matching-service`), signed in by
 `kinetix-identity-service`, reached only through the edge (`kinetix-api-gateway`).**
@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 
-FleetPulse Driver turns a courier's phone into a live position source and a job terminal: it streams GPS to
+Kinetix Courier turns a courier's phone into a live position source and a job terminal: it streams GPS to
 matching over a persistent WebSocket, receives dispatched jobs in real time, and lets the courier carry a job
 through pickup and a proved delivery, while surviving the flaky connectivity of real-world driving.
 

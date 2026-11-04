@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/viewmodels/update_required_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/viewmodels/update_required_view_model.dart';
 import 'package:provider/provider.dart';
 
 class UpdateRequiredScreen extends StatelessWidget {
@@ -25,7 +25,7 @@ class UpdateRequiredScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Kinetix no longer accepts this version of FleetPulse Driver. '
+              'Kinetix no longer accepts this version of Kinetix Courier. '
               'Install the latest version from Google Play or the App Store, '
               'then open it again.',
               textAlign: TextAlign.center,

@@ -1,6 +1,6 @@
-import 'package:fleet_pulse_mobile/models/converters.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:kinetix_courier/models/converters.dart';
+import 'package:kinetix_courier/models/ids.dart';
 
 part 'driver_session.freezed.dart';
 part 'driver_session.g.dart';

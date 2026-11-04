@@ -1,4 +1,4 @@
-import 'package:fleet_pulse_mobile/config/app_check_mode.dart';
+import 'package:kinetix_courier/config/app_check_mode.dart';
 
 abstract final class AppConfigCheck {
   static final RegExp _projectNumber = new RegExp(r'^[0-9]+$');

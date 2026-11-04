@@ -1,18 +1,18 @@
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' show sha256;
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/mixins/retry_mixin.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
-import 'package:fleet_pulse_mobile/services/channel/push_timeout_exception.dart';
-import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart';
-import 'package:fleet_pulse_mobile/services/storage/proof_draft_store.dart';
-import 'package:fleet_pulse_mobile/state/job_update.dart';
 import 'package:injectable/injectable.dart' hide Order;
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/mixins/retry_mixin.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/order_repository.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_event.dart';
+import 'package:kinetix_courier/services/channel/channel_reply.dart';
+import 'package:kinetix_courier/services/channel/push_timeout_exception.dart';
+import 'package:kinetix_courier/services/storage/pod_photo_uploader.dart';
+import 'package:kinetix_courier/services/storage/proof_draft_store.dart';
+import 'package:kinetix_courier/state/job_update.dart';
 
 @LazySingleton(as: OrderRepository)
 class OrderRepositoryImpl with RetryMixin implements OrderRepository {

@@ -2,22 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:fleet_pulse_mobile/config/app_config.dart';
-import 'package:fleet_pulse_mobile/core/app_logger.dart';
-import 'package:fleet_pulse_mobile/models/driver_session.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
-import 'package:fleet_pulse_mobile/services/channel/handshake_refused_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/join_refused_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/push_timeout_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/ws_channel_socket.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/config/app_config.dart';
+import 'package:kinetix_courier/core/app_logger.dart';
+import 'package:kinetix_courier/models/driver_session.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
+import 'package:kinetix_courier/services/channel/channel_event.dart';
+import 'package:kinetix_courier/services/channel/channel_exception.dart';
+import 'package:kinetix_courier/services/channel/channel_reply.dart';
+import 'package:kinetix_courier/services/channel/channel_socket.dart';
+import 'package:kinetix_courier/services/channel/handshake_refused_exception.dart';
+import 'package:kinetix_courier/services/channel/join_refused_exception.dart';
+import 'package:kinetix_courier/services/channel/push_timeout_exception.dart';
+import 'package:kinetix_courier/services/channel/ws_channel_socket.dart';
 
 typedef SocketConnector =
     ChannelSocket Function(Uri uri, Iterable<String> protocols);

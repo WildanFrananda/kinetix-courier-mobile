@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/services/storage/pod_photo_uploader.dart';
 
 class _Bucket implements HttpClientAdapter {
   _Bucket(this._status);

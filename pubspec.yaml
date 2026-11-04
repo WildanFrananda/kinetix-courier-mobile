@@ -1,5 +1,5 @@
-name: fleet_pulse_mobile
-description: "FleetPulse Driver — telemetry & orders terminal."
+name: kinetix_courier
+description: "Kinetix Courier — telemetry & orders terminal."
 publish_to: 'none'
 version: 1.0.0+1
 

@@ -463,8 +463,9 @@ What the user does once (consoles):
   recognises only an app installed through Google Play: an internal testing track is enough, a sideloaded APK
   always fails.
 - Apple: enable App Attest on the App ID, so automatic signing puts it in the provisioning profile.
-- The ids are still `com.example.fleet_pulse_mobile` and `com.example.fleetPulseMobile`, and release builds are
-  signed with the debug key: Play refuses `com.example`, so both must be chosen before the apps are registered.
+- The ids are `com.kinetix.courier` on Android and on iOS (2026-11-04, under the `com.kinetix` group payment and
+  notification already use; Play refuses the `com.example` they replaced). Register the apps under them. Release
+  builds are still signed with the debug key.
 
 `dio` exports a `Headers` class too, so `driver_api.dart` imports it with `hide Headers`; without that, Retrofit's
 generator cannot resolve `@Headers` and the whole DI container fails to build.

@@ -1,7 +1,7 @@
-import 'package:fleet_pulse_mobile/ui/screens/update_required_screen.dart';
-import 'package:fleet_pulse_mobile/viewmodels/update_required_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/ui/screens/update_required_screen.dart';
+import 'package:kinetix_courier/viewmodels/update_required_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 

@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/config/app_config.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
-import 'package:fleet_pulse_mobile/services/seal/seal_api.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/config/app_config.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
+import 'package:kinetix_courier/services/seal/seal_api.dart';
 
 @module
 abstract class RegisterModule {

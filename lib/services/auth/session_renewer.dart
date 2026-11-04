@@ -2,15 +2,15 @@ import 'dart:io' show HttpStatus;
 
 import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof_unavailable_exception.dart';
-import 'package:fleet_pulse_mobile/services/auth/answer_parser.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
-import 'package:fleet_pulse_mobile/services/auth/identity_error.dart';
-import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/attestation/client_proof.dart';
+import 'package:kinetix_courier/services/attestation/client_proof_unavailable_exception.dart';
+import 'package:kinetix_courier/services/auth/answer_parser.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
+import 'package:kinetix_courier/services/auth/identity_error.dart';
+import 'package:kinetix_courier/services/auth/token_store.dart';
 
 @lazySingleton
 class SessionRenewer {

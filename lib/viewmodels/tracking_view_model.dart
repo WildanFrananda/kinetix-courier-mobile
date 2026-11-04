@@ -1,16 +1,16 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/state/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart' hide Order;
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/connection_repository.dart';
+import 'package:kinetix_courier/repositories/duty_repository.dart';
+import 'package:kinetix_courier/repositories/order_repository.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/state/state.dart';
 
 @injectable
 class TrackingViewModel extends ChangeNotifier {

@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/models/driver_session.dart';
-import 'package:fleet_pulse_mobile/models/two_factor_challenge.dart';
+import 'package:kinetix_courier/models/driver_session.dart';
+import 'package:kinetix_courier/models/two_factor_challenge.dart';
 
 sealed class LoginOutcome {
   const LoginOutcome();

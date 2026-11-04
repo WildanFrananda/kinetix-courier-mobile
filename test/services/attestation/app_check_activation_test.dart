@@ -1,9 +1,9 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:fleet_pulse_mobile/config/app_check_mode.dart';
-import 'package:fleet_pulse_mobile/services/attestation/app_check_activation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/config/app_check_mode.dart';
+import 'package:kinetix_courier/services/attestation/app_check_activation.dart';
 
 void main() {
   test('a release build attests with Play Integrity and App Attest', () {

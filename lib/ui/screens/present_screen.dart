@@ -1,9 +1,9 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/state/present_ui_state.dart';
-import 'package:fleet_pulse_mobile/ui/widgets/seal/holder_runtime_view.dart';
-import 'package:fleet_pulse_mobile/viewmodels/present_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/state/present_ui_state.dart';
+import 'package:kinetix_courier/ui/widgets/seal/holder_runtime_view.dart';
+import 'package:kinetix_courier/viewmodels/present_view_model.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';

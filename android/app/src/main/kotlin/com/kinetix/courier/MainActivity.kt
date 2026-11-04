@@ -1,4 +1,4 @@
-package com.example.fleet_pulse_mobile
+package com.kinetix.courier
 
 import io.flutter.embedding.android.FlutterActivity
 

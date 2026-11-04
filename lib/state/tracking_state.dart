@@ -1,7 +1,7 @@
-import 'package:fleet_pulse_mobile/core/failure.dart';
-import 'package:fleet_pulse_mobile/models/driver_availability.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
+import 'package:kinetix_courier/core/failure.dart';
+import 'package:kinetix_courier/models/driver_availability.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
 
 sealed class TrackingState {
   const TrackingState();

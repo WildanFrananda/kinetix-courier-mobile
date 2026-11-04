@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/core/app_logger.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof_source.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof_unavailable_exception.dart';
-import 'package:fleet_pulse_mobile/services/auth/identity_error.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/app_logger.dart';
+import 'package:kinetix_courier/services/attestation/client_proof_source.dart';
+import 'package:kinetix_courier/services/attestation/client_proof_unavailable_exception.dart';
+import 'package:kinetix_courier/services/auth/identity_error.dart';
 
 @lazySingleton
 class ClientProof {

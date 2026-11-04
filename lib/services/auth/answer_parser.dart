@@ -1,4 +1,4 @@
-import 'package:fleet_pulse_mobile/core/app_logger.dart';
+import 'package:kinetix_courier/core/app_logger.dart';
 
 abstract final class AnswerParser {
   static T? parse<T>(

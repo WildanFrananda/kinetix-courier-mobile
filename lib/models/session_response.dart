@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/models/authenticated_account.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:kinetix_courier/models/authenticated_account.dart';
 
 part 'session_response.freezed.dart';
 part 'session_response.g.dart';

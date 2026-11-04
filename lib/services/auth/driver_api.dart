@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart' hide Headers;
-import 'package:fleet_pulse_mobile/config/app_config.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
+import 'package:kinetix_courier/config/app_config.dart';
+import 'package:kinetix_courier/models/models.dart';
 import 'package:retrofit/retrofit.dart';
 
 part 'driver_api.g.dart';

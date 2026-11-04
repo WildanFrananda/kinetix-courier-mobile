@@ -1,9 +1,9 @@
-import 'package:fleet_pulse_mobile/core/app_logger.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/app_logger.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
 
 typedef PositionBoxOpener = Future<LazyBox<Map<dynamic, dynamic>>> Function();
 

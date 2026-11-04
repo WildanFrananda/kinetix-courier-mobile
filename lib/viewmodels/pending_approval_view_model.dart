@@ -1,11 +1,11 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/state/approval_check_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/state/approval_check_state.dart';
 
 @injectable
 class PendingApprovalViewModel extends ChangeNotifier {

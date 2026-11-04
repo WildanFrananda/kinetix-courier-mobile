@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
-import 'package:fleet_pulse_mobile/services/auth/identity_error.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
+import 'package:kinetix_courier/services/auth/identity_error.dart';
 
 class _Answer implements HttpClientAdapter {
   _Answer(this.status, this.body, this.headers);

@@ -8,7 +8,7 @@ class ConfigErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FleetPulse Driver',
+      title: 'Kinetix Courier',
       home: Scaffold(
         appBar: AppBar(title: const Text('This build cannot start')),
         body: ListView(

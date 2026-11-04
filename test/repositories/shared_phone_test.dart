@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/duty_repository_impl.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
-import 'package:fleet_pulse_mobile/services/location/location_service.dart';
-import 'package:fleet_pulse_mobile/services/offline/offline_position_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/duty_repository_impl.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_socket.dart';
+import 'package:kinetix_courier/services/location/location_service.dart';
+import 'package:kinetix_courier/services/offline/offline_position_store.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockLocation extends Mock implements LocationService {}

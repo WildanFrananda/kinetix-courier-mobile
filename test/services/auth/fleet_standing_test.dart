@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
-import 'package:fleet_pulse_mobile/services/auth/fleet_standing.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
+import 'package:kinetix_courier/services/auth/fleet_standing.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockApi extends Mock implements DriverApi {}

@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:kinetix_courier/core/core.dart';
 
 mixin SignInDelayMixin on ChangeNotifier {
   static const Duration _tick = Duration(seconds: 1);

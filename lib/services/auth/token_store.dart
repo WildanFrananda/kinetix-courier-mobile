@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/models/models.dart';
 
 @lazySingleton
 class TokenStore {

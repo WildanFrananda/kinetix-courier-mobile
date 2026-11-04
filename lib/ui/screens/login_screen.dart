@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/viewmodels/login_view_model.dart';
 import 'package:provider/provider.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -17,7 +17,7 @@ class LoginScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text('FleetPulse Driver', textAlign: TextAlign.center),
+            const Text('Kinetix Courier', textAlign: TextAlign.center),
             const SizedBox(height: 24),
             if (vm.awaitingCode) ...<Widget>[
               const Text(

@@ -1,7 +1,7 @@
 import 'dart:io' show WebSocketException;
 
-import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
-import 'package:fleet_pulse_mobile/services/channel/handshake_refused_exception.dart';
+import 'package:kinetix_courier/services/channel/channel_socket.dart';
+import 'package:kinetix_courier/services/channel/handshake_refused_exception.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 

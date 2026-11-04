@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/models/delivery_proof_draft.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/services/storage/proof_draft_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:kinetix_courier/models/delivery_proof_draft.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/services/storage/proof_draft_store.dart';
 
 void main() {
   const DriverId courier = DriverId(7);

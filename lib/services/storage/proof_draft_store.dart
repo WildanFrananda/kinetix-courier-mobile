@@ -1,9 +1,9 @@
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/models/delivery_proof_draft.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/models/delivery_proof_draft.dart';
+import 'package:kinetix_courier/models/ids.dart';
 
 typedef ProofDraftBoxOpener = Future<Box<Map<dynamic, dynamic>>> Function();
 

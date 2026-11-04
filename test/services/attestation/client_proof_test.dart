@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof_source.dart';
-import 'package:fleet_pulse_mobile/services/attestation/client_proof_unavailable_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/services/attestation/client_proof.dart';
+import 'package:kinetix_courier/services/attestation/client_proof_source.dart';
+import 'package:kinetix_courier/services/attestation/client_proof_unavailable_exception.dart';
 
 class _Source implements ClientProofSource {
   final List<bool> asked = <bool>[];

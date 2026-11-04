@@ -1,16 +1,16 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/credential_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/services/device/screen_wake.dart';
-import 'package:fleet_pulse_mobile/services/device/share_sheet.dart';
-import 'package:fleet_pulse_mobile/services/seal/holder_runtime.dart';
-import 'package:fleet_pulse_mobile/state/credential_ui_state.dart';
-import 'package:fleet_pulse_mobile/state/present_ui_state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/credential_view_model.dart';
-import 'package:fleet_pulse_mobile/viewmodels/present_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/credential_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/services/device/screen_wake.dart';
+import 'package:kinetix_courier/services/device/share_sheet.dart';
+import 'package:kinetix_courier/services/seal/holder_runtime.dart';
+import 'package:kinetix_courier/state/credential_ui_state.dart';
+import 'package:kinetix_courier/state/present_ui_state.dart';
+import 'package:kinetix_courier/viewmodels/credential_view_model.dart';
+import 'package:kinetix_courier/viewmodels/present_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockCredentials extends Mock implements CredentialRepository {}

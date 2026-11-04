@@ -1,18 +1,18 @@
-import 'package:fleet_pulse_mobile/di/injection.dart';
-import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route_mapper.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/di/injection.dart';
+import 'package:kinetix_courier/repositories/connection_repository.dart';
+import 'package:kinetix_courier/routes/app_route_mapper.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
 import 'package:provider/provider.dart';
 
-class FleetPulseApp extends StatefulWidget {
-  const FleetPulseApp({super.key});
+class KinetixCourierApp extends StatefulWidget {
+  const KinetixCourierApp({super.key});
 
   @override
-  State<FleetPulseApp> createState() => _FleetPulseAppState();
+  State<KinetixCourierApp> createState() => _KinetixCourierAppState();
 }
 
-class _FleetPulseAppState extends State<FleetPulseApp> {
+class _KinetixCourierAppState extends State<KinetixCourierApp> {
   late final AppLifecycleListener _lifecycle;
 
   @override
@@ -28,7 +28,7 @@ class _FleetPulseAppState extends State<FleetPulseApp> {
     return ChangeNotifierProvider<AppRouterState>.value(
       value: getIt<AppRouterState>(),
       child: MaterialApp(
-        title: 'FleetPulse Driver',
+        title: 'Kinetix Courier',
         theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
         home: const _RouterHost(),
       ),

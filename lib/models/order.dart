@@ -1,8 +1,8 @@
-import 'package:fleet_pulse_mobile/models/converters.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/models/lat_lng.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:kinetix_courier/models/converters.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/models/lat_lng.dart';
 
 part 'order.freezed.dart';
 part 'order.g.dart';

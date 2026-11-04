@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/viewmodels/register_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/viewmodels/register_view_model.dart';
 import 'package:provider/provider.dart';
 
 class RegisterScreen extends StatelessWidget {

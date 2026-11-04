@@ -1,11 +1,11 @@
 import 'dart:io' show HttpStatus;
 
 import 'package:dio/dio.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/auth/answer_parser.dart';
-import 'package:fleet_pulse_mobile/services/auth/driver_api.dart';
 import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/answer_parser.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
 
 @lazySingleton
 class FleetStanding {

@@ -1,4 +1,4 @@
-import 'package:fleet_pulse_mobile/core/failure.dart';
+import 'package:kinetix_courier/core/failure.dart';
 
 sealed class Result<T> {
   const Result();

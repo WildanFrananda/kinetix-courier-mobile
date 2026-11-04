@@ -1,10 +1,10 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/driver_availability.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
-import 'package:fleet_pulse_mobile/state/state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/driver_availability.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
+import 'package:kinetix_courier/state/state.dart';
+import 'package:kinetix_courier/viewmodels/tracking_view_model.dart';
 import 'package:provider/provider.dart';
 
 part '../widgets/tracking/online_view.dart';

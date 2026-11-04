@@ -1,19 +1,19 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/di/injection.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/connection_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/duty_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
-import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/state/state.dart';
-import 'package:fleet_pulse_mobile/ui/app.dart';
-import 'package:fleet_pulse_mobile/ui/screens/order_screen.dart';
-import 'package:fleet_pulse_mobile/viewmodels/order_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/di/injection.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/connection_repository.dart';
+import 'package:kinetix_courier/repositories/duty_repository.dart';
+import 'package:kinetix_courier/repositories/order_repository.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/state/state.dart';
+import 'package:kinetix_courier/ui/app.dart';
+import 'package:kinetix_courier/ui/screens/order_screen.dart';
+import 'package:kinetix_courier/viewmodels/order_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 
@@ -297,7 +297,7 @@ void main() {
   });
 
   Future<void> start(WidgetTester tester) async {
-    await tester.pumpWidget(const FleetPulseApp());
+    await tester.pumpWidget(const KinetixCourierApp());
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
   }

@@ -1,4 +1,4 @@
-import 'package:fleet_pulse_mobile/models/order.dart';
+import 'package:kinetix_courier/models/order.dart';
 
 sealed class AppRoute {
   const AppRoute();

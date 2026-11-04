@@ -1,15 +1,15 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/core/failure.dart';
-import 'package:fleet_pulse_mobile/core/result.dart';
-import 'package:fleet_pulse_mobile/models/ids.dart';
-import 'package:fleet_pulse_mobile/models/driver_session.dart';
-import 'package:fleet_pulse_mobile/repositories/session_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_route.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/register_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/failure.dart';
+import 'package:kinetix_courier/core/result.dart';
+import 'package:kinetix_courier/models/driver_session.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/viewmodels/register_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockSession extends Mock implements SessionRepository {}

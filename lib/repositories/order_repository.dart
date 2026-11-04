@@ -1,6 +1,6 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/state/job_update.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/state/job_update.dart';
 
 abstract interface class OrderRepository {
   Stream<JobUpdate> watchJobs();

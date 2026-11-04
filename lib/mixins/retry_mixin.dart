@@ -1,4 +1,4 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
+import 'package:kinetix_courier/core/core.dart';
 
 mixin RetryMixin {
   Future<Result<T>> retry<T>(

@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_socket.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_exception.dart';
+import 'package:kinetix_courier/services/channel/channel_reply.dart';
+import 'package:kinetix_courier/services/channel/channel_socket.dart';
 
 class FakeSocket implements ChannelSocket {
   final StreamController<dynamic> _in = StreamController<dynamic>.broadcast();

@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/services/auth/token_store.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/token_store.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockStorage extends Mock implements FlutterSecureStorage {}

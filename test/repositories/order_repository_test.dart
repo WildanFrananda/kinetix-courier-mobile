@@ -7,18 +7,18 @@ import 'package:crypto/crypto.dart' show sha256;
 
 import 'package:dio/dio.dart';
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/models.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository_impl.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_client.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_event.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_exception.dart';
-import 'package:fleet_pulse_mobile/services/channel/channel_reply.dart';
-import 'package:fleet_pulse_mobile/services/channel/push_timeout_exception.dart';
-import 'package:fleet_pulse_mobile/services/storage/pod_photo_uploader.dart';
-import 'package:fleet_pulse_mobile/services/storage/proof_draft_store.dart';
-import 'package:fleet_pulse_mobile/state/job_update.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/order_repository_impl.dart';
+import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_event.dart';
+import 'package:kinetix_courier/services/channel/channel_exception.dart';
+import 'package:kinetix_courier/services/channel/channel_reply.dart';
+import 'package:kinetix_courier/services/channel/push_timeout_exception.dart';
+import 'package:kinetix_courier/services/storage/pod_photo_uploader.dart';
+import 'package:kinetix_courier/services/storage/proof_draft_store.dart';
+import 'package:kinetix_courier/state/job_update.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockChannel extends Mock implements ChannelClient {}

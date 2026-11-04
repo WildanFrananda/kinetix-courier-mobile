@@ -1,9 +1,9 @@
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/state/tracking_state.dart';
-import 'package:fleet_pulse_mobile/ui/screens/tracking_screen.dart';
-import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/state/tracking_state.dart';
+import 'package:kinetix_courier/ui/screens/tracking_screen.dart';
+import 'package:kinetix_courier/viewmodels/tracking_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
