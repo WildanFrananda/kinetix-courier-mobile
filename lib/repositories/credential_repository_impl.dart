@@ -70,7 +70,7 @@ class CredentialRepositoryImpl implements CredentialRepository {
       if (body != null && parsed != null) {
         await _vault.keepCredential(jsonEncode(body));
 
-        return new Ok<CourierCredential?>(parsed);
+        return new Ok<CourierCredential?>(await _asProvable(parsed));
       }
     }
 
@@ -80,7 +80,11 @@ class CredentialRepositoryImpl implements CredentialRepository {
       return new Err<CourierCredential?>(failure);
     }
 
-    return new Ok<CourierCredential?>(_credentialOf(known));
+    final CourierCredential? kept = _credentialOf(known);
+
+    return new Ok<CourierCredential?>(
+      kept == null ? null : await _asProvable(kept),
+    );
   }
 
   @override
@@ -127,7 +131,7 @@ class CredentialRepositoryImpl implements CredentialRepository {
 
         await _vault.keepCredential(jsonEncode(body));
 
-        return new Ok<CourierCredential>(parsed);
+        return new Ok<CourierCredential>(await _asProvable(parsed));
       case Err<dynamic>(:final Failure failure):
         return new Err<CourierCredential>(failure);
     }
@@ -353,6 +357,55 @@ class CredentialRepositoryImpl implements CredentialRepository {
     } on HolderRuntimeException {
       return const Err<PresentedAnswer>(CredentialFailure('holder_failed'));
     }
+  }
+
+  Future<CourierCredential> _asProvable(CourierCredential credential) async {
+    final CredentialPlacement? placement = credential.placement;
+
+    if (credential.standing != CredentialStanding.issued || placement == null) {
+      return credential;
+    }
+
+    final String key = '${placement.contractAddress}:${placement.leafIndex}';
+
+    if (await _vault.coveredPlacement() == key) {
+      return credential;
+    }
+
+    final CourierCredential waiting = credential.copyWith(
+      standing: CredentialStanding.pending,
+    );
+    final Result<Unit> refreshed = await refreshPublicState(force: true);
+
+    if (refreshed is Err<Unit>) {
+      return waiting;
+    }
+
+    final Map<String, dynamic>? snapshot = _objectOf(
+      _decoded(await _vault.snapshot()),
+    );
+    final Object? readAt = snapshot?['readAt'];
+
+    if (readAt is! String ||
+        snapshot?['contractAddress'] != placement.contractAddress) {
+      return waiting;
+    }
+
+    final String? firstRead = await _vault.firstReadAfterIssue(key);
+
+    if (firstRead == null) {
+      await _vault.keepFirstReadAfterIssue(key, readAt);
+
+      return waiting;
+    }
+
+    if (firstRead == readAt) {
+      return waiting;
+    }
+
+    await _vault.keepCoveredPlacement(key);
+
+    return credential;
   }
 
   Future<Result<dynamic>> _authorized(

@@ -518,6 +518,16 @@ verifier only that it meets the verifier's minimums (infra `docs/SEAL-SERVICE.md
   against an older registry root still lands. A request whose predicate this phone does not know is refused
   (`unknown_predicate`) rather than fetched on the spot. `test/repositories/credential_repository_test.dart` checks
   that `present` touches `SealApi` not at all.
+- **Ready means this phone can prove it.** A proof runs against the phone's own snapshot, and seal's witness refuses a
+  leaf index that snapshot's tree has not reached (`the credential is not in the registry`), so a snapshot read before
+  the credential was issued can never prove it. Asking for a credential reads the snapshot before seal issues it, which
+  would leave a courier who just got one unable to show it for up to six hours. So `_asProvable` reports an `issued`
+  credential as `pending` until the phone holds a snapshot that must contain it. Seal caches the snapshot for up to a
+  minute, so the first read after seeing `issued` proves nothing: it may be the cached one. A read with another
+  `readAt` was made after that first read, and so after the issue. The phone's clock plays no part. The key is the
+  placement (registry and leaf index), so a new generation's re-issue waits again. While a credential is `pending` the
+  screen asks every 20 seconds (`CredentialViewModel.pendingCheck`), and stops once it is ready. "Show to a verifier"
+  needs ready, so this never reaches seal during a presentation.
 - **The verifier's request** is a QR code `kinetix-seal:present?v=1&r=<registry>&p=<predicate row id>&c=<challenge>&a=<answer URL>`.
   The app scans it with `mobile_scanner`, refuses anything else, an `a` that is not `https`, another registry, or an
   unknown row, and shows the courier, before any proof, the predicate's label and minimums from its own copy of

@@ -19,6 +19,10 @@ class HolderVault {
 
   static const String _refreshedKey = 'seal.public_state_at';
 
+  static const String _coveredKey = 'seal.snapshot_covers';
+
+  static const String _firstReadKey = 'seal.first_read_after_issue';
+
   final FlutterSecureStorage _storage;
 
   Future<String> holderSecret() async {
@@ -80,6 +84,29 @@ class HolderVault {
     );
   }
 
+  Future<String?> coveredPlacement() {
+    return _storage.read(key: _coveredKey);
+  }
+
+  Future<void> keepCoveredPlacement(String placement) {
+    return _storage.write(key: _coveredKey, value: placement);
+  }
+
+  Future<String?> firstReadAfterIssue(String placement) async {
+    final String? stored = await _storage.read(key: _firstReadKey);
+    final String prefix = '$placement ';
+
+    if (stored == null || !stored.startsWith(prefix)) {
+      return null;
+    }
+
+    return stored.substring(prefix.length);
+  }
+
+  Future<void> keepFirstReadAfterIssue(String placement, String readAt) {
+    return _storage.write(key: _firstReadKey, value: '$placement $readAt');
+  }
+
   Future<void> forget() async {
     for (final String key in <String>[
       _secretKey,
@@ -88,6 +115,8 @@ class HolderVault {
       _predicatesKey,
       _entryKey,
       _refreshedKey,
+      _coveredKey,
+      _firstReadKey,
     ]) {
       await _storage.delete(key: key);
     }

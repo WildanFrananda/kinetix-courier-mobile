@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinetix_courier/core/core.dart';
 import 'package:kinetix_courier/models/models.dart';
@@ -237,6 +240,167 @@ void main() {
       model().showToVerifier();
 
       expect(router.stack.last, isA<PresentRoute>());
+    });
+
+    group('following a credential being issued', () {
+      final CourierCredential pending = credential.copyWith(
+        standing: CredentialStanding.pending,
+      );
+
+      test('asks again until it is ready, then asks nothing more', () {
+        fakeAsync((FakeAsync async) {
+          CourierCredential latest = pending;
+
+          when(
+            () => credentials.current(),
+          ).thenAnswer((_) async => new Ok<CourierCredential?>(latest));
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.load());
+          async.flushMicrotasks();
+          clearInteractions(credentials);
+
+          async.elapse(CredentialViewModel.pendingCheck);
+
+          verify(() => credentials.current()).called(1);
+          expect(
+            (vm.state as CredentialShowing).credential.standing,
+            CredentialStanding.pending,
+          );
+
+          latest = credential;
+          async.elapse(CredentialViewModel.pendingCheck);
+
+          verify(() => credentials.current()).called(1);
+          expect(
+            (vm.state as CredentialShowing).credential.standing,
+            CredentialStanding.issued,
+          );
+
+          async.elapse(CredentialViewModel.pendingCheck * 5);
+
+          verifyNever(() => credentials.current());
+          vm.dispose();
+        });
+      });
+
+      test('never asks about a credential that is already ready', () {
+        fakeAsync((FakeAsync async) {
+          when(
+            () => credentials.current(),
+          ).thenAnswer((_) async => const Ok<CourierCredential?>(credential));
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.load());
+          async.flushMicrotasks();
+          clearInteractions(credentials);
+          async.elapse(CredentialViewModel.pendingCheck * 5);
+
+          verifyNever(() => credentials.current());
+          vm.dispose();
+        });
+      });
+
+      test('follows one it has just asked for', () {
+        fakeAsync((FakeAsync async) {
+          when(
+            () => credentials.request(),
+          ).thenAnswer((_) async => new Ok<CourierCredential>(pending));
+          when(
+            () => credentials.current(),
+          ).thenAnswer((_) async => new Ok<CourierCredential?>(pending));
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.request());
+          async
+            ..flushMicrotasks()
+            ..elapse(CredentialViewModel.pendingCheck);
+
+          verify(() => credentials.current()).called(1);
+          vm.dispose();
+        });
+      });
+
+      test('keeps the reason a repeated request was refused', () {
+        fakeAsync((FakeAsync async) {
+          when(
+            () => credentials.current(),
+          ).thenAnswer((_) async => new Ok<CourierCredential?>(pending));
+          when(() => credentials.request()).thenAnswer(
+            (_) async =>
+                const Err<CourierCredential>(CredentialFailure('ISSUED_TODAY')),
+          );
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.load());
+          async.flushMicrotasks();
+          unawaited(vm.request());
+          async
+            ..flushMicrotasks()
+            ..elapse(CredentialViewModel.pendingCheck);
+
+          expect(
+            (vm.state as CredentialShowing).error,
+            isA<CredentialFailure>(),
+          );
+          vm.dispose();
+        });
+      });
+
+      test('stops when the screen goes away', () {
+        fakeAsync((FakeAsync async) {
+          when(
+            () => credentials.current(),
+          ).thenAnswer((_) async => new Ok<CourierCredential?>(pending));
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.load());
+          async.flushMicrotasks();
+          clearInteractions(credentials);
+          vm.dispose();
+          async.elapse(CredentialViewModel.pendingCheck * 5);
+
+          verifyNever(() => credentials.current());
+        });
+      });
+
+      test('ignores an answer that arrives after the screen went away', () {
+        fakeAsync((FakeAsync async) {
+          final Completer<Result<CourierCredential?>> answer =
+              new Completer<Result<CourierCredential?>>();
+          int asked = 0;
+
+          when(() => credentials.current()).thenAnswer((_) {
+            asked += 1;
+
+            return asked == 1
+                ? Future<Result<CourierCredential?>>.value(
+                    new Ok<CourierCredential?>(pending),
+                  )
+                : answer.future;
+          });
+
+          final CredentialViewModel vm = model();
+
+          unawaited(vm.load());
+          async
+            ..flushMicrotasks()
+            ..elapse(CredentialViewModel.pendingCheck);
+          vm.dispose();
+          answer.complete(const Ok<CourierCredential?>(credential));
+          async.flushMicrotasks();
+
+          expect(
+            (vm.state as CredentialShowing).credential.standing,
+            CredentialStanding.pending,
+          );
+        });
+      });
     });
   });
 }

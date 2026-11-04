@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
 import 'package:kinetix_courier/core/core.dart';
@@ -13,6 +15,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 class CredentialViewModel extends ChangeNotifier {
   CredentialViewModel(this._router, this._credentials, this._runtime);
 
+  static const Duration pendingCheck = Duration(seconds: 20);
+
   final AppRouterState _router;
 
   final CredentialRepository _credentials;
@@ -21,9 +25,26 @@ class CredentialViewModel extends ChangeNotifier {
 
   CredentialUiState _state = const CredentialLoading();
 
+  Timer? _pendingTimer;
+
+  bool _checking = false;
+
+  bool _disposed = false;
+
   CredentialUiState get state => _state;
 
   WebViewController get holder => _runtime.controller;
+
+  bool get _isRequesting => switch (_state) {
+    CredentialLoading() => false,
+    CredentialAbsent(:final bool requesting) => requesting,
+    CredentialShowing(:final bool requesting) => requesting,
+  };
+
+  Failure? get _shownError => switch (_state) {
+    CredentialShowing(:final Failure? error) => error,
+    _ => null,
+  };
 
   Future<void> load() async {
     await _credentials.refreshPublicState(force: false);
@@ -46,6 +67,10 @@ class CredentialViewModel extends ChangeNotifier {
 
     final Result<CourierCredential> requested = await _credentials.request();
 
+    if (_disposed) {
+      return;
+    }
+
     requested.fold(
       (CourierCredential credential) =>
           _state = new CredentialShowing(credential),
@@ -56,6 +81,7 @@ class CredentialViewModel extends ChangeNotifier {
       },
     );
     _leaveIfSignedOut(requested);
+    _followPending();
     notifyListeners();
   }
 
@@ -67,15 +93,71 @@ class CredentialViewModel extends ChangeNotifier {
     _router.pop();
   }
 
-  void _apply(Result<CourierCredential?> current, {required bool requesting}) {
+  @override
+  void dispose() {
+    _disposed = true;
+    _pendingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _apply(
+    Result<CourierCredential?> current, {
+    required bool requesting,
+    Failure? error,
+  }) {
+    if (_disposed) {
+      return;
+    }
+
     _state = current.fold(
       (CourierCredential? credential) => credential == null
           ? new CredentialAbsent(requesting: requesting)
-          : new CredentialShowing(credential, requesting: requesting),
+          : new CredentialShowing(
+              credential,
+              requesting: requesting,
+              error: error,
+            ),
       (Failure failure) => new CredentialAbsent(error: failure),
     );
     _leaveIfSignedOut(current);
+    _followPending();
     notifyListeners();
+  }
+
+  void _followPending() {
+    final CredentialUiState state = _state;
+    final bool pending =
+        state is CredentialShowing &&
+        state.credential.standing == CredentialStanding.pending;
+
+    if (!pending) {
+      _pendingTimer?.cancel();
+      _pendingTimer = null;
+
+      return;
+    }
+
+    _pendingTimer ??= new Timer.periodic(pendingCheck, (_) {
+      unawaited(_checkPending());
+    });
+  }
+
+  Future<void> _checkPending() async {
+    if (_checking || _isRequesting) {
+      return;
+    }
+
+    _checking = true;
+
+    final Result<CourierCredential?> current = await _credentials.current();
+
+    _checking = false;
+
+    if (_isRequesting) {
+      return;
+    }
+
+    _apply(current, requesting: false, error: _shownError);
   }
 
   void _leaveIfSignedOut<T>(Result<T> result) {

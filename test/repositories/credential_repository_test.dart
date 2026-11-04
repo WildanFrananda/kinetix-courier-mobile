@@ -101,6 +101,11 @@ DioException refused(int code, [String? error]) => new DioException(
   ),
 );
 
+DioException unreachable() => new DioException(
+  requestOptions: new RequestOptions(path: '/x'),
+  type: DioExceptionType.connectionError,
+);
+
 void main() {
   late _MockApi api;
   late _MockStore tokens;
@@ -400,28 +405,186 @@ void main() {
         await vault.keepCredential(jsonEncode(credentialBody()));
         when(
           () => api.credential(any(), any()),
-        ).thenAnswer((_) async => credentialBody(registryPlacement: placement));
+        ).thenAnswer((_) async => credentialBody());
 
         final CourierCredential? fresh =
             (await repository.current() as Ok<CourierCredential?>).value;
 
-        expect(fresh?.standing, CredentialStanding.issued);
-        expect(fresh?.placement?.leafIndex, '7');
+        expect(fresh?.standing, CredentialStanding.pending);
+        expect(fresh?.deliveries, 120);
 
-        when(() => api.credential(any(), any())).thenThrow(
-          new DioException(
-            requestOptions: new RequestOptions(path: '/x'),
-            type: DioExceptionType.connectionError,
-          ),
+        when(() => api.credential(any(), any())).thenThrow(unreachable());
+
+        final CourierCredential? kept =
+            (await repository.current() as Ok<CourierCredential?>).value;
+
+        expect(kept?.standing, CredentialStanding.pending);
+        expect(kept?.deliveries, 120);
+      },
+    );
+  });
+
+  group('an issued credential is ready only when this phone can prove it', () {
+    late String readAt;
+
+    Future<CredentialStanding?> standing() async {
+      final Result<CourierCredential?> current = await repository.current();
+
+      return (current as Ok<CourierCredential?>).value?.standing;
+    }
+
+    setUp(() async {
+      readAt = '2026-11-03T03:00:00.000Z';
+      when(() => api.snapshot()).thenAnswer(
+        (_) async => <String, dynamic>{...snapshot, 'readAt': readAt},
+      );
+      when(
+        () => api.credential(any(), any()),
+      ).thenAnswer((_) async => credentialBody(registryPlacement: placement));
+      await vault.keepCredential(jsonEncode(credentialBody()));
+    });
+
+    test(
+      'waits on the first read after seal says issued, which seal may have read before the issue',
+      () async {
+        expect(await standing(), CredentialStanding.pending);
+        expect(await standing(), CredentialStanding.pending);
+        verify(() => api.snapshot()).called(2);
+      },
+    );
+
+    test(
+      'is ready once a later read of the registry reaches the phone',
+      () async {
+        expect(await standing(), CredentialStanding.pending);
+
+        readAt = '2026-11-03T03:01:00.000Z';
+
+        expect(await standing(), CredentialStanding.issued);
+        expect(
+          (jsonDecode((await vault.snapshot())!)
+              as Map<String, dynamic>)['readAt'],
+          readAt,
+        );
+      },
+    );
+
+    test(
+      'asks seal for no further snapshot once ready, and stays ready when seal cannot be reached',
+      () async {
+        await standing();
+        readAt = '2026-11-03T03:01:00.000Z';
+        await standing();
+        clearInteractions(api);
+
+        expect(await standing(), CredentialStanding.issued);
+        verifyNever(() => api.snapshot());
+
+        when(() => api.credential(any(), any())).thenThrow(unreachable());
+
+        expect(await standing(), CredentialStanding.issued);
+        verifyNever(() => api.snapshot());
+      },
+    );
+
+    test(
+      'a read that fails leaves the snapshot from before the issue uncounted',
+      () async {
+        await repository.refreshPublicState(force: true);
+        when(() => api.snapshot()).thenThrow(unreachable());
+
+        expect(await standing(), CredentialStanding.pending);
+
+        readAt = '2026-11-03T03:01:00.000Z';
+        when(() => api.snapshot()).thenAnswer(
+          (_) async => <String, dynamic>{...snapshot, 'readAt': readAt},
         );
 
+        expect(await standing(), CredentialStanding.pending);
+
+        readAt = '2026-11-03T03:02:00.000Z';
+
+        expect(await standing(), CredentialStanding.issued);
+      },
+    );
+
+    test('a snapshot of another registry counts for nothing', () async {
+      when(() => api.snapshot()).thenAnswer(
+        (_) async => <String, dynamic>{
+          ...snapshot,
+          'contractAddress': 'ee' * 32,
+          'readAt': readAt,
+        },
+      );
+
+      expect(await standing(), CredentialStanding.pending);
+
+      readAt = '2026-11-03T03:01:00.000Z';
+
+      expect(await standing(), CredentialStanding.pending);
+    });
+
+    test('a place in a new generation waits again', () async {
+      await standing();
+      readAt = '2026-11-03T03:01:00.000Z';
+
+      expect(await standing(), CredentialStanding.issued);
+
+      when(() => api.credential(any(), any())).thenAnswer(
+        (_) async => credentialBody(
+          registryPlacement: <String, dynamic>{...placement, 'leafIndex': '8'},
+        ),
+      );
+
+      expect(await standing(), CredentialStanding.pending);
+
+      readAt = '2026-11-03T03:02:00.000Z';
+
+      expect(await standing(), CredentialStanding.issued);
+    });
+
+    test(
+      'asking again for an issued credential follows the same rule',
+      () async {
+        when(
+          () => api.requestCredential(any(), any()),
+        ).thenAnswer((_) async => credentialBody(registryPlacement: placement));
+
+        final Result<CourierCredential> first = await repository.request();
+
         expect(
-          (await repository.current() as Ok<CourierCredential?>)
-              .value
-              ?.standing,
+          (first as Ok<CourierCredential>).value.standing,
+          CredentialStanding.pending,
+        );
+
+        readAt = '2026-11-03T03:01:00.000Z';
+
+        final Result<CourierCredential> second = await repository.request();
+
+        expect(
+          (second as Ok<CourierCredential>).value.standing,
           CredentialStanding.issued,
         );
       },
     );
+
+    test('a credential seal has not issued asks for no snapshot', () async {
+      when(
+        () => api.credential(any(), any()),
+      ).thenAnswer((_) async => credentialBody());
+
+      expect(await standing(), CredentialStanding.pending);
+      verifyNever(() => api.snapshot());
+    });
+
+    test('signing out forgets what the phone knew', () async {
+      await standing();
+      readAt = '2026-11-03T03:01:00.000Z';
+      await standing();
+      await vault.forget();
+
+      expect(await vault.coveredPlacement(), isNull);
+      expect(await vault.firstReadAfterIssue('$registry:7'), isNull);
+    });
   });
 }
