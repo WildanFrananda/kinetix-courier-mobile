@@ -28,12 +28,14 @@ jobs:
       - name: Test + coverage
         run: flutter test --coverage
 
+      - name: App flows (headless)
+        run: flutter test integration_test -d flutter-tester
+
       - name: Filter coverage
         run: |
           sudo apt-get update && sudo apt-get install -y lcov
           lcov --remove coverage/lcov.info \
             '*.g.dart' \
-            '*/services/foreground/*' \
             '*/services/location/location_service.dart' \
             '*/maps/maps_launcher.dart' \
             '*/services/channel/ws_channel_socket.dart' \

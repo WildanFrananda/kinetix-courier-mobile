@@ -1,0 +1,276 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/failure.dart';
+import 'package:kinetix_courier/core/result.dart';
+import 'package:kinetix_courier/models/driver_session.dart';
+import 'package:kinetix_courier/models/ids.dart';
+import 'package:kinetix_courier/repositories/session_repository.dart';
+import 'package:kinetix_courier/routes/app_route.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/viewmodels/register_view_model.dart';
+import 'package:mocktail/mocktail.dart';
+
+class _MockSession extends Mock implements SessionRepository {}
+
+void main() {
+  late _MockSession session;
+  late AppRouterState router;
+  late RegisterViewModel sut;
+
+  void fill(RegisterViewModel vm) {
+    vm
+      ..setEmail('driver@kinetix.test')
+      ..setName('Budi')
+      ..setPhone('081234567890')
+      ..setPassword('supersecret1')
+      ..setVehiclePlate('B 1234 XY')
+      ..setCapacityKg('200');
+  }
+
+  void stubRegister(Result<DriverSession> answer) {
+    when(
+      () => session.register(
+        email: any(named: 'email'),
+        name: any(named: 'name'),
+        phone: any(named: 'phone'),
+        password: any(named: 'password'),
+        vehiclePlate: any(named: 'vehiclePlate'),
+        capacityKg: any(named: 'capacityKg'),
+      ),
+    ).thenAnswer((_) async => answer);
+  }
+
+  void verifyNeverRegistered() {
+    verifyNever(
+      () => session.register(
+        email: any(named: 'email'),
+        name: any(named: 'name'),
+        phone: any(named: 'phone'),
+        password: any(named: 'password'),
+        vehiclePlate: any(named: 'vehiclePlate'),
+        capacityKg: any(named: 'capacityKg'),
+      ),
+    );
+  }
+
+  setUp(() {
+    session = new _MockSession();
+    router = new AppRouterState();
+    sut = new RegisterViewModel(router, session);
+  });
+
+  test('empty fields set an error and skip register', () async {
+    await sut.submit();
+    expect(sut.error, isNotNull);
+    verifyNeverRegistered();
+  });
+
+  test('an email without an @ is rejected', () async {
+    fill(sut);
+    sut.setEmail('driver.kinetix.test');
+    await sut.submit();
+    expect(sut.error, contains('email'));
+    verifyNeverRegistered();
+  });
+
+  test('short password is rejected', () async {
+    fill(sut);
+    sut.setPassword('short');
+    await sut.submit();
+    expect(sut.error, contains('12'));
+    verifyNeverRegistered();
+  });
+
+  for (final String bad in <String>['not a number', '0', '-5']) {
+    test('capacity "$bad" is rejected', () async {
+      fill(sut);
+      sut.setCapacityKg(bad);
+      await sut.submit();
+      expect(sut.error, contains('Capacity'));
+      verifyNeverRegistered();
+    });
+  }
+
+  test('successful register surfaces a message and clears the error', () async {
+    stubRegister(
+      const Ok<DriverSession>(
+        DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+      ),
+    );
+    fill(sut);
+    await sut.submit();
+    expect(sut.successMessage, isNotNull);
+    expect(sut.error, isNull);
+  });
+
+  test('successful register routes to the waiting screen', () async {
+    stubRegister(
+      const Ok<DriverSession>(
+        DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+      ),
+    );
+    fill(sut);
+    await sut.submit();
+
+    expect(router.stack.last, isA<PendingApprovalRoute>());
+  });
+
+  test('a failed register stays put', () async {
+    stubRegister(const Err<DriverSession>(ChannelFailure('nope')));
+    fill(sut);
+    await sut.submit();
+
+    expect(router.stack.last, isNot(isA<PendingApprovalRoute>()));
+  });
+
+  test('the email reaches the repository as typed', () async {
+    stubRegister(
+      const Ok<DriverSession>(
+        DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+      ),
+    );
+    fill(sut);
+    await sut.submit();
+
+    final String sent =
+        verify(
+              () => session.register(
+                email: captureAny(named: 'email'),
+                name: any(named: 'name'),
+                phone: any(named: 'phone'),
+                password: any(named: 'password'),
+                vehiclePlate: any(named: 'vehiclePlate'),
+                capacityKg: any(named: 'capacityKg'),
+              ),
+            ).captured.single
+            as String;
+    expect(sent, 'driver@kinetix.test');
+  });
+
+  test('failed register surfaces the failure', () async {
+    stubRegister(const Err<DriverSession>(ChannelFailure('name taken')));
+    fill(sut);
+    await sut.submit();
+    expect(sut.error, 'name taken');
+  });
+
+  test('a phone number that is too short is refused before sending', () async {
+    fill(sut);
+    sut.setPhone('0812');
+    await sut.submit();
+    expect(sut.error, contains('8 to 15 digits'));
+    verifyNeverRegistered();
+  });
+
+  test(
+    'a phone number typed with spaces and dashes is sent as digits',
+    () async {
+      stubRegister(
+        const Ok<DriverSession>(
+          DriverSession(driverId: DriverId(1), token: 't', refreshToken: 'r'),
+        ),
+      );
+      fill(sut);
+      sut.setPhone('+62 812-3456-7890');
+      await sut.submit();
+
+      final String sent =
+          verify(
+                () => session.register(
+                  email: any(named: 'email'),
+                  name: any(named: 'name'),
+                  phone: captureAny(named: 'phone'),
+                  password: any(named: 'password'),
+                  vehiclePlate: any(named: 'vehiclePlate'),
+                  capacityKg: any(named: 'capacityKg'),
+                ),
+              ).captured.single
+              as String;
+      expect(sent, '+6281234567890');
+    },
+  );
+
+  test('a password longer than 72 bytes is refused before sending', () async {
+    fill(sut);
+    sut.setPassword('é' * 37);
+    await sut.submit();
+    expect(sut.error, contains('72 bytes'));
+    verifyNeverRegistered();
+  });
+
+  test('a capacity above 5000 kg is refused before sending', () async {
+    fill(sut);
+    sut.setCapacityKg('5001');
+    await sut.submit();
+    expect(sut.error, contains('Capacity'));
+    verifyNeverRegistered();
+  });
+
+  test('an empty capacity is not filled in for the courier', () async {
+    fill(sut);
+    sut.setCapacityKg('');
+    await sut.submit();
+    expect(sut.error, 'All fields are required');
+    verifyNeverRegistered();
+  });
+
+  test(
+    "identity's advice after the account was made is shown as it is",
+    () async {
+      const String advice =
+          'Your account exists, but the fleet could not be reached to file your '
+          'vehicle. Submit the same details again to finish.';
+      stubRegister(const Err<DriverSession>(ServiceUnavailableFailure(advice)));
+      fill(sut);
+      await sut.submit();
+      expect(sut.error, advice);
+    },
+  );
+
+  test(
+    'a delayed resume says how long to wait and holds the submit until then',
+    () {
+      fakeAsync((FakeAsync async) {
+        stubRegister(
+          const Err<DriverSession>(SignInDelayedFailure(Duration(seconds: 2))),
+        );
+        fill(sut);
+        unawaited(sut.submit());
+        async.flushMicrotasks();
+
+        expect(sut.delayed, isTrue);
+        expect(sut.error, 'Too many sign-in attempts. Try again in 2 seconds.');
+
+        unawaited(sut.submit());
+        async.flushMicrotasks();
+        verify(
+          () => session.register(
+            email: any(named: 'email'),
+            name: any(named: 'name'),
+            phone: any(named: 'phone'),
+            password: any(named: 'password'),
+            vehiclePlate: any(named: 'vehiclePlate'),
+            capacityKg: any(named: 'capacityKg'),
+          ),
+        ).called(1);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(sut.delayed, isFalse);
+        expect(sut.error, isNull);
+
+        sut.dispose();
+      });
+    },
+  );
+
+  test('an app identity does not accept asks for an update', () async {
+    stubRegister(const Err<DriverSession>(AppUpdateRequiredFailure()));
+    fill(sut);
+
+    await sut.submit();
+
+    expect(router.stack.single, isA<UpdateRequiredRoute>());
+  });
+}

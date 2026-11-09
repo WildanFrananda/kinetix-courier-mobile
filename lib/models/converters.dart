@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/models/ids.dart';
 import 'package:json_annotation/json_annotation.dart';
+import 'package:kinetix_courier/models/ids.dart';
 
 class DriverIdConverter implements JsonConverter<DriverId, int> {
   const DriverIdConverter();

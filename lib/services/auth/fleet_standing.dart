@@ -1,0 +1,61 @@
+import 'dart:io' show HttpStatus;
+
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/services/auth/answer_parser.dart';
+import 'package:kinetix_courier/services/auth/driver_api.dart';
+
+@lazySingleton
+class FleetStanding {
+  FleetStanding(this._api);
+
+  static const String _pendingApproval = 'pending_approval';
+  static const String _unreadable =
+      'The fleet answered in a way this app cannot read. Try again shortly.';
+
+  final DriverApi _api;
+
+  Future<Result<DriverProfile>> check(String accessToken) async {
+    final Object? raw;
+
+    try {
+      raw = await _api.me('Bearer $accessToken');
+    } on DioException catch (e) {
+      return new Err<DriverProfile>(_refusal(e.response));
+    } on Object {
+      return const Err<DriverProfile>(NetworkFailure());
+    }
+
+    final DriverProfileEnvelope? envelope = AnswerParser.parse(
+      raw,
+      DriverProfileEnvelope.fromJson,
+      from: 'matching',
+    );
+
+    return envelope == null
+        ? const Err<DriverProfile>(UnreadableAnswerFailure(_unreadable))
+        : new Ok<DriverProfile>(envelope.data);
+  }
+
+  Failure _refusal(Response<dynamic>? response) {
+    final Object? body = response?.data;
+    final Object? error = body is Map<String, dynamic> ? body['error'] : null;
+
+    AppLogger.debug('fleet standing: HTTP ${response?.statusCode} $error');
+
+    return switch (response?.statusCode) {
+      null => const NetworkFailure(),
+      HttpStatus.forbidden when error == _pendingApproval =>
+        const PendingApprovalFailure(),
+      HttpStatus.notFound => const RegistrationIncompleteFailure(),
+      HttpStatus.unauthorized || HttpStatus.forbidden => const AuthFailure(
+        'The fleet refused this session. Sign in again.',
+      ),
+      _ => const ServiceUnavailableFailure(
+        'The fleet could not be reached. Try again shortly.',
+      ),
+    };
+  }
+}

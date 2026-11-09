@@ -1,5 +1,5 @@
-import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/viewmodels/login_view_model.dart';
 import 'package:provider/provider.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -17,19 +17,38 @@ class LoginScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text('FleetPulse Driver', textAlign: TextAlign.center),
+            const Text('Kinetix Courier', textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            TextField(
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
-              onChanged: vm.setPhone,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-              onChanged: vm.setPassword,
-            ),
+            if (vm.awaitingCode) ...<Widget>[
+              const Text(
+                'Enter the six-digit code from your authenticator app.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey<String>('two-factor-code'),
+                keyboardType: TextInputType.number,
+                autocorrect: false,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Authentication code',
+                ),
+                onChanged: vm.setCode,
+              ),
+            ] else ...<Widget>[
+              TextField(
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Email'),
+                onChanged: vm.setEmail,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password'),
+                onChanged: vm.setPassword,
+              ),
+            ],
             const SizedBox(height: 20),
             if (vm.error != null)
               Padding(
@@ -41,15 +60,30 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
             FilledButton(
-              onPressed: vm.submitting ? null : vm.submit,
+              onPressed: vm.submitting || vm.delayed
+                  ? null
+                  : vm.awaitingCode
+                  ? vm.submitCode
+                  : vm.submit,
               child: vm.submitting
                   ? const SizedBox(
                       height: 18,
                       width: 18,
                       child: CircularProgressIndicator(),
                     )
-                  : const Text('Log in'),
+                  : Text(vm.awaitingCode ? 'Verify' : 'Log in'),
             ),
+            const SizedBox(height: 8),
+            if (vm.awaitingCode)
+              TextButton(
+                onPressed: vm.submitting ? null : vm.cancelCode,
+                child: const Text('Sign in again'),
+              )
+            else
+              TextButton(
+                onPressed: vm.navigateToRegister,
+                child: const Text("Don't have an account? Register"),
+              ),
           ],
         ),
       ),

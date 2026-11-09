@@ -237,3 +237,308 @@ If the user asks: *"Create a Profile screen where a user can edit their name"*, 
    takes `AppRouterState` and `ProfileRepository` — the interface, not the impl).
 5. **UI Screen** — create `ProfileScreen` (Stateless, reads VM via `context.watch`).
 6. **Mapper Update** — add `ProfileRoute() => MaterialPage(child: _inject<ProfileViewModel>(const ProfileScreen()))` to the switch statement in `app_route_mapper.dart`.
+
+## 7. Decisions the code states but cannot explain
+
+### A refused session is renewed once, then matching is asked why
+
+Identity's access token lives fifteen minutes and its refresh token thirty days. `SessionRenewer` trades the
+refresh token for a new pair and stores both before anything uses them. It sends one request at a time for the
+whole app, because identity treats a refresh token presented twice as stolen and revokes the family. `TokenStore`
+keeps the session as one secure-storage record written in one call, so a crash can never keep half of a rotated
+pair (identity would read the old refresh token as reuse).
+
+What a refresh answer means:
+- `400`, `401` or `403`: refused; the session is cleared and the courier signs in again. Identity has no account
+  suspension at sign-in or refresh (2026-10-22); a deactivated courier is refused by matching
+  (`pending_approval`). A `403` used to be retried forever as an outage. `401 CLIENT_MISMATCH` (the session was
+  started by another client name) is one of these: identity spent nothing, but no retry or fresh proof changes
+  the name, so it is sent once and the session ends.
+- `400 UNKNOWN_CLIENT` or `CLIENT_REQUIRED`: identity does not accept this build. Its guard refuses before the
+  token is read, so the refresh token is unspent and the session is kept for an updated app;
+  `AppUpdateRequiredFailure` ends the socket's recovery as `SessionUpdateRequired` (see "The app proves itself
+  to identity").
+- `429`, `502`, `503`, a request that never left the phone (no connection, connect or send timeout, TLS) or no
+  App Check token on the phone: identity did not decide; the session is kept and renewed later.
+- An answer lost after the request was sent (receive timeout, the connection dropped mid-answer, `500`, `504`)
+  or a `2xx` this app cannot read: identity may have spent the refresh token. Presenting it again would be read
+  as theft and revoke the family, so the session is cleared and the courier signs in again.
+
+Matching refuses a driver socket at the HTTP upgrade, `403` with no body, for an expired token, a token whose role
+is not `courier`, an account with no vehicle and a courier who is pending or deactivated alike; `503` means it could
+not ask identity. `ConnectionRepositoryImpl` answers a refusal by renewing and reconnecting. A second refusal
+before a connection has held is real, and the app asks `GET /api/v1/matching/driver/me` what it is:
+`403 pending_approval` ends the session as `SessionNotApproved` (the waiting screen, session kept, so an approved
+courier carries on at the next start); `401`, another `403` or `404` ends it as `SessionSignedOut`; a profile
+whose `id` is not the stored driver rebinds the session to that driver and rejoins at once; no answer is retried
+after 1, 2, 4 … up to 30 seconds, and at once when the app returns to the foreground. A join refused with
+`pending_approval` is `SessionNotApproved` at once. Splash asks the same question before it opens the socket, so a
+courier who registered and is still waiting never reaches the tracking screen. Every `standing()` writes the
+driver `driver/me` names over the stored one (a stale id used to reconnect every 30 s forever), and the waiting
+screen's "Check again" asks it on demand.
+
+### Signing in keeps a pending session and revokes every other
+
+After login or `2fa/verify`, `driver/me` decides. `200` stores the session with that driver. `403
+pending_approval` stores it without a driver (`DriverSession.driverId` is null): the fleet names the driver only
+once it approves, and the next `standing()` fills it in; `ChannelClient` never opens a socket for a session
+without a driver and answers `notApproved`, so such a session can only reach the waiting screen. Any other answer
+(`404`, `401`/`403`, `5xx`, no answer, an unreadable body) sends the fresh pair to `POST /api/v1/auth/logout`
+within five seconds and stores nothing, so no thirty-day refresh token is left alive and forgotten. A `2xx` this
+app cannot read is `UnreadableAnswerFailure`, never `NetworkFailure`: after `2fa/verify` the challenge is spent, so
+the courier signs in again; after registration the account exists, so the courier signs in with the same email.
+
+### Identity's sign-in delay is waited out, never argued with
+
+Identity counts attempts per account (`sign_in_attempt_policy.ts`): from the fifth the next waits 1, 2, 4 … up to
+60 s. A request inside the wait is `429 SIGN_IN_DELAYED`, with `retryAfterSeconds` in the body and `Retry-After`,
+answered before any password or code is read and not counted, on login, `2fa/verify` and a courier registration
+that resumes an account. `IdentityError.delayOf` reads the body's seconds, else `Retry-After` (also what the
+per-address throttle sends), and the repository answers `SignInDelayedFailure(wait)`. `SignInDelayMixin` keeps the
+moment the wait ends, ticks once a second, shows "Try again in N seconds" as the error and holds the submit
+(`delayed`) until then; the login and registration view models refuse to send while it runs, so a courier cannot
+spend the next attempt early. It is never a wrong password: the code step keeps its challenge, which identity did
+not count either, and no stored session is touched. A `429` that names no wait keeps the old "wait a minute".
+
+### A challenge takes five codes, and only one answer keeps it
+
+Identity's challenge allows five attempts (`two_factor_challenge_attempts`); the sixth is refused even with the right
+code, and a new challenge needs the password. It answers every refusal of `2fa/verify` with 401 and Nest's default
+body (`{"statusCode": 401, "message": …, "error": "Unauthorized"}`), no code of its own, so the app reads the
+message. Exactly `That code is not valid` (`IdentityError.wrongCodeMessage`) keeps the code step; every other 401
+from verify (`This challenge allows no more attempts; sign in again`, a code already used, a challenge already
+answered, an expired or foreign token, an account gone) means the challenge can take no more codes and is
+`ChallengeSpentFailure`: the courier is back at the password with the reason. If identity rewords the wrong-code
+message, a wrong code sends the courier back to the password, the safe side; a code in identity's body would end
+the string match.
+
+### An administrator is not a courier
+
+An admin without a second factor who signs in correctly gets `{mfaEnrolmentRequired, enrolmentToken, …}` instead of
+a session. The courier app does not enrol admins: `login` answers `AdminAccountFailure` ("this app is for
+couriers"), stores nothing and asks the fleet nothing. The enrolment token is dropped, not revoked: it lives 600 s
+with no refresh token, and identity refuses it on logout (`403 TWO_FACTOR_ENROLMENT_ONLY`). The app has no call to
+`2fa/setup`, `2fa/enable` or `2fa/disable`, so identity's rule that they need the account password
+(`PASSWORD_REQUIRED`) does not reach it.
+
+### The socket is Kong's route, and its token is a subprotocol
+
+The URL is `<WS_BASE>/ws/v1/matching/driver?vsn=2.0.0`. Kong's route strips `/ws/v1/matching/driver` and sends
+the rest after the service path `/driver/websocket`, which is Phoenix's socket; `/ws/v1/matching/driver/websocket`
+reaches `/driver/websocket/websocket` and Phoenix answers 404 (production, 2026-10-21). The access token is not in
+the URL, which Kong's access log records: it is offered in `Sec-WebSocket-Protocol` as
+`base64url.bearer.phx.<the token, standard base64, padding removed>` beside `phoenix`. Despite the prefix, Phoenix
+decodes it with `Base.decode64!(…, padding: false)`, the standard alphabet; a JWT encodes to the same characters
+in both.
+
+A heartbeat goes every 30 s and its reply must come within 10 s; a push that times out (5 s) sends a heartbeat at
+once. Phoenix answers heartbeats from the socket process, not from the channel, so a missing reply means the
+connection is dead (half-open after a cell handover), not that a handler is slow; the socket is torn down and
+reconnected, and the next join declares duty again. Before, replies were dropped and the courier stayed off duty
+at matching without knowing it.
+
+`WsChannelSocket` connects with `IOWebSocketChannel.connect`, not `WebSocketChannel.connect`: the latter goes
+through `package:web_socket` 1.0.1, which rethrows dart:io's `WebSocketException` without its `httpStatusCode`, so a
+refusal looked exactly like an outage and a pending courier reconnected forever. `401`/`403` at the upgrade is a
+refusal; every other status, and an address nothing answers, is retried. `socket_handshake_test.dart` proves both
+against a real local server.
+
+### Duty is declared after every join
+
+Joining `driver:<id>` puts nobody on duty; the join reply carries the status matching holds. While the courier is
+on duty the app sends `status online` after every join (a disconnect took it off duty) and, once that succeeds,
+one `ping` at once with the newest fix, moved or not, because matching dispatches only on a position received
+after the courier went on duty. A courier off duty whose join finds it online is set `offline`. The `status` reply
+is what matching decided (`online` is `busy` while the courier carries a job), and that is what the screen shows.
+A `status` whose reply was lost is asked again on the next four-second tick. `recorded_at` is the fix's own time,
+never the send time.
+
+### Positions recorded offline go as `ping_batch`, never as `ping`
+
+Matching keeps one live position per courier, the newest by `recorded_at`, and ignores an older `ping`; so a fix
+that could not go live never goes through `ping` later. A fix is kept in the Hive box `offline_positions`
+(`OfflinePositionStore`, a lazy box whose key ends in the fix's microseconds since the epoch, so one moment is one
+entry per courier and the keys sort oldest first) whenever it cannot be sent live: no socket, joined but `status online` not yet
+answered, a `ping` whose push failed or timed out, or a fix taken during a `rate_limited` pause. The five-metre
+filter applies to kept fixes as to live ones; when a pause ends the newest fix goes live once, moved or not.
+
+Positions belong to a courier. The key is `<driver id>:<microseconds, 17 digits>`, the courier being the one who
+went on duty (`DutyRepositoryImpl._owner`); a batch is read and removed only for the driver of the socket
+(`ChannelClient.driverId`), and `ChannelClient.pingBatch` refuses a batch whose owner is not the socket's driver.
+Courier A's unsent positions therefore wait for A's next sign-in on that phone and never go out as courier B's
+history (they did before: the box had no owner). Entries kept by an older build, without an owner, are deleted
+when the box opens. Capacity and the 24-hour cut apply to the whole box.
+
+The queue is sent with `ping_batch` (`{"pings": [ping fields, ...]}`), which matching stores as history and never
+as the live position. It starts after the join, `status online` and the fresh live fix (or right after a join while
+off duty, when there is no live position to put first), oldest first, at most 100 positions per batch, one batch
+in flight and one timer at most: a live ping that succeeds while a batch is pending or a retry is scheduled starts
+nothing. An `ok` reply settles the whole batch, `refused` entries included, and only then is the batch deleted.
+Each refusal is a verdict on the entry itself, which no resend changes: `too_old` only grows older,
+`invalid_telemetry` is its content, and `ahead_of_server_clock` means its time came from a clock matching does not
+trust, so waiting would store a wrong time as history. They are logged with their counts, and
+`ahead_of_server_clock` tells the courier to set the clock automatically. An
+error reply (`unavailable`, `invalid_batch`, `batch_too_large`) or no reply keeps it and retries after 5 s,
+doubling up to 5 min; `rate_limited` waits the 60 s window, because matching allows 30 batches a minute (apart
+from the live pings' 100 per 10 s) and says nothing about when to come back. Batches that succeed go 2.5 s apart,
+24 a minute. A disconnect cancels the scheduled batch; the next join starts again. Positions older than 24 hours
+are deleted before each batch rather than sent, because matching refuses them as `too_old`.
+
+The box holds at most 21,600 positions, the oldest dropped first: a day of driving at the four-second cadence,
+which is everything matching would still accept. A lazy box keeps only its keys in memory and reads positions
+from disk when a batch is made, so a full box costs a few megabytes of memory and of disk, and it drains in about
+nine minutes at 24 batches a minute.
+
+`rate_limited` on a live ping pauses live pings for ten seconds; `invalid_telemetry` (a phone clock more than five
+minutes ahead) is shown to the courier and that fix is not sent again.
+
+### Background tracking is geolocator's foreground service
+
+On Android the position stream is started with `ForegroundNotificationConfig`, so geolocator's own location
+foreground service runs exactly while the courier is on duty and stops with the stream, or with the process.
+`flutter_foreground_task` was removed: its task handler was empty, the app's work never ran in it, and its
+service outlived the Flutter engine with a notification saying the location was shared while nothing was sent. On
+iOS `UIBackgroundModes` `location` sits at the top level of `Info.plist` (it was inside the scene manifest, where
+iOS does not read it) and the stream allows background updates.
+
+### Signing out reaches identity first
+
+`SessionRepository.logout` calls `POST /api/v1/auth/logout` with the access token and the refresh token, so the
+refresh family ends at identity; an expired access token is renewed once for it. If identity cannot be reached
+within five seconds the courier is signed out on the phone anyway, and that refresh token stays valid at identity
+until it expires: the courier's choice to sign out wins over an unreachable server. Enabling or disabling a second
+factor elsewhere ends this session; the next renewal is refused and the courier is signed out like any refusal.
+
+### The build names the edge
+
+`HTTP_BASE` and `WS_BASE` have no defaults. They come from `--dart-define-from-file=dart_defines/<environment>.json`
+(`bin/build` passes it), must be `https://` and `wss://` with no path, and an app built without them shows what is
+missing instead of starting. The Android manifest allows no cleartext. The same check covers the Firebase values
+and `APP_CHECK_PROVIDER` (next section). `bin/build lab` makes a debug build and `bin/build production` a release
+build.
+
+### The app proves itself to identity
+
+Login, `2fa/verify`, courier registration and refresh carry `X-Kinetix-Client: courier-app` (a public name,
+`@Headers` on `DriverApi`) and `X-Firebase-AppCheck: <App Check token>`; logout and `driver/me` carry neither.
+`ClientProof.present` takes the SDK's cached token; on `401 CLIENT_PROOF_REQUIRED` or `CLIENT_PROOF_INVALID` (the
+code is the JSON body's `error`) it asks for a fresh one and retries once. A second refusal is
+`UntrustedClientFailure`, never "wrong password"; on refresh it ends the session, because retrying would spend the
+Play Integrity quota (10,000 a day) on a phone identity will not accept. `503 CLIENT_PROOF_UNAVAILABLE`, and a
+phone that cannot get a token at all, are "try again later" and never sign anyone out.
+
+`400 UNKNOWN_CLIENT` and `CLIENT_REQUIRED` mean identity does not know this app's name (its `IDENTITY_CLIENTS`
+lacks `courier-app`, or the name was retired) or never received it (something on the way dropped the header):
+nothing this phone can do fixes it. They are `AppUpdateRequiredFailure`, never a credentials error, and every place
+that meets one (sign-in, the code, registration, the splash, the waiting screen, a renewal behind the socket)
+replaces the stack with `UpdateRequiredRoute`, which asks for no credentials. Nothing retries it; "Try again"
+starts again from the splash. A stored session is kept, so an updated app carries on without signing in.
+
+Firebase is started from dart-defines, not from `google-services.json` or `GoogleService-Info.plist`, and the
+Google services Gradle plugin is not used: `FIREBASE_PROJECT_ID`, `FIREBASE_MESSAGING_SENDER_ID`,
+`FIREBASE_API_KEY_ANDROID`, `FIREBASE_APP_ID_ANDROID`, `FIREBASE_API_KEY_IOS`, `FIREBASE_APP_ID_IOS` (each platform's
+app has its own key and id). `FIREBASE_MESSAGING_SENDER_ID` must be the project number: the Play Integrity
+provider passes it to Play as the Cloud project number, and identity checks the same number in the token's `iss`
+and `aud` (`FIREBASE_PROJECT_NUMBER` there). The keys are in both define files with empty values until the user
+fills them; an empty one keeps the app on its error screen. `firebase_app_check` ships the Play Integrity and
+debug providers, so Android needs nothing more.
+
+`APP_CHECK_PROVIDER` is `attestation` (Play Integrity, App Attest) in production and `debug` in the lab. A release
+build never uses the debug provider: `AppConfigCheck` refuses to start with `debug` when `kReleaseMode`, and
+`AppCheckActivation.providersFor` returns the attested providers whenever `releaseBuild` is true. The debug
+provider prints its token in logcat or the Xcode console; it is registered in the Firebase console per lab device
+and never written into a define file. The lab needs the same Firebase values: the debug provider trades that
+token with Firebase for a real App Check token, which identity verifies like any other. iOS needs 15.0 (Firebase's packages) and `Runner.entitlements` with
+`com.apple.developer.devicecheck.appattest-environment` `production`.
+
+What the user does once (consoles):
+- Firebase: register the Android app (package name, SHA-256 of the app signing key from Play Console → App
+  integrity → App signing, and of the upload key) and the iOS app (bundle id, team id); copy each app's API key
+  and app id, the project id and the project number into `dart_defines/production.json` and `lab.json`.
+- App Check: register Play Integrity for the Android app, requiring device integrity (`MEETS_DEVICE_INTEGRITY`,
+  so rooted phones and emulators are refused), and App Attest for the iOS app; token time to live 1 hour; add
+  each lab device's debug token. The console's enforcement switches cover Firebase products only; identity
+  enforces App Check for Kinetix.
+- Play Console: link the Firebase project's Cloud project (App integrity → Play Integrity API). Play Integrity
+  recognises only an app installed through Google Play: an internal testing track is enough, a sideloaded APK
+  always fails.
+- Apple: enable App Attest on the App ID, so automatic signing puts it in the provisioning profile.
+- The ids are `com.kinetix.courier` on Android and on iOS (2026-11-04, under the `com.kinetix` group payment and
+  notification already use; Play refuses the `com.example` they replaced). Register the apps under them. Release
+  builds are still signed with the debug key.
+
+`dio` exports a `Headers` class too, so `driver_api.dart` imports it with `hide Headers`; without that, Retrofit's
+generator cannot resolve `@Headers` and the whole DI container fails to build.
+
+### Proof of delivery
+
+`delivered` needs the photo URL and the signature (`signature_required` without it). The camera photo is taken at
+most 1920 px on a side at JPEG quality 85, so it stays far below the gateway's 16 MB storage limit, and is refused
+before it is hashed unless its first bytes are a JPEG's, which matching checks too. A `pickup` or `delivered` whose
+reply was lost is retried until answered (1, 2, 4 … 15 s), as long as the courier's session holds the socket
+(`ChannelClient.driverId`); matching answers the repeat `ok`, so the courier sees success. A push timeout is
+`TimeoutFailure`. `proof_unverifiable` is retried as well. It used to stop after about 30 s.
+
+The uploaded photo's URL and the signature are kept in the Hive box `delivery_proof_drafts`, keyed by driver and
+job, until the delivery is answered, the job is cancelled, taken off the courier or no longer active, or 24 hours
+pass; a job screen opened again (after the app was killed) restores them.
+
+### A job screen changes only for news about its own job
+
+`OrderRepository.watchJobs` maps channel events to `JobUpdate`: `JobActive(order)`, `JobNone` (`active_order`
+null), `JobCancelled(id)`, `JobUnassigned(id)` (also an `order_updated` whose job is pending again). An event this
+app cannot read emits nothing. `active_order` names the newest of possibly several active jobs, so a job screen
+ignores news about another job; only `JobNone` says its job is no longer active ("This job is no longer active
+for you", not "Order cancelled", which both used to show).
+
+### A repository the container disposes declares `dispose`
+
+`injectable` types the dispose callback by the registered interface, so `ConnectionRepository` and
+`DutyRepository` declare `dispose()`. At `ed533f7` `ConnectionRepository` did not, and the generated container,
+which neither `flutter analyze` (it skips `*.config.dart`) nor the unit tests compiled, broke every build of the
+app. `test/di/injection_test.dart` builds the container in the unit suite.
+
+### Showing a credential (seal, S1f)
+
+The courier holds a credential of their own deliveries, rating and days active, issued by seal, and shows a
+verifier only that it meets the verifier's minimums (infra `docs/SEAL-SERVICE.md`, SEAL-D8, D9, D16, D18).
+
+- **The proof runs on the phone, in seal's holder runtime.** `HolderRuntime` loads seal's page
+  (`/api/v1/seal/holder/<digest>/index.html`) into a `WebViewController` and talks to it through the JavaScript
+  channel `SealHolderBridge`: `sealHolder.<method>(id, …)` in, `{ id, ok, … }` back (`HolderAnswers` pairs them).
+  `webview_flutter` has no headless mode, so `HolderRuntimeView` puts the WebView in the tree at 1×1 px on the two
+  screens that use it. The screens stay Flutter's. `flutter_inappwebview` (headless) was not taken: its last release
+  was 2024-10.
+- **The holder secret** is 32 random bytes in `flutter_secure_storage` (`HolderVault`), made on first use and never
+  sent anywhere: seal receives only `holderPublicKey(secret)`, computed in the runtime (SEAL-D16's default). A lost
+  phone means asking for a new credential.
+- **Nothing calls seal while presenting** (SEAL-D18: the verifier relays, so seal must not see this phone at that
+  moment). The registry snapshot, the approved predicates and the runtime's entry are fetched by the credential
+  screen at most every six hours (`refreshPublicState`), and `offerFor`/`present` read only those copies; a proof
+  against an older registry root still lands. A request whose predicate this phone does not know is refused
+  (`unknown_predicate`) rather than fetched on the spot. `test/repositories/credential_repository_test.dart` checks
+  that `present` touches `SealApi` not at all.
+- **Ready means this phone can prove it.** A proof runs against the phone's own snapshot, and seal's witness refuses a
+  leaf index that snapshot's tree has not reached (`the credential is not in the registry`), so a snapshot read before
+  the credential was issued can never prove it. Asking for a credential reads the snapshot before seal issues it, which
+  would leave a courier who just got one unable to show it for up to six hours. So `_asProvable` reports an `issued`
+  credential as `pending` until the phone holds a snapshot that must contain it. Seal caches the snapshot for up to a
+  minute, so the first read after seeing `issued` proves nothing: it may be the cached one. A read with another
+  `readAt` was made after that first read, and so after the issue. The phone's clock plays no part. The key is the
+  placement (registry and leaf index), so a new generation's re-issue waits again. While a credential is `pending` the
+  screen asks every 20 seconds (`CredentialViewModel.pendingCheck`), and stops once it is ready. "Show to a verifier"
+  needs ready, so this never reaches seal during a presentation.
+- **The verifier's request** is a QR code `kinetix-seal:present?v=1&r=<registry>&p=<predicate row id>&c=<challenge>&a=<answer URL>`.
+  The app scans it with `mobile_scanner`, refuses anything else, an `a` that is not `https`, another registry, or an
+  unknown row, and shows the courier, before any proof, the predicate's label and minimums from its own copy of
+  seal's public list. The proof takes about a minute on an entry-level phone; `ScreenWake` keeps the screen on.
+- **The answer** (a bound transaction of about 3.6 KB, valid for an hour) goes to the verifier, never to seal:
+  in person as frames `KSP1:<first 8 hex of its SHA-256>:<i>/<n>:<600 base64url characters>`, cycled every 250 ms in
+  one QR; remotely as the link `<a>#<challenge>.<base64url transaction>` through the share sheet, both in the
+  fragment, which no browser sends to a server: the verifier's page uses the challenge to match the answer to the
+  request it made (`PresentationFrames`).
+- **Packages**, all BSD-3 and at least two weeks old when added (2026-11-03): `webview_flutter` 4.14.1,
+  `mobile_scanner` 7.4.2, `qr_flutter` 4.1.0 with `qr` pinned to 3.0.2 (3.0.3 was five days old), `share_plus`
+  13.3.1, `wakelock_plus` 1.7.0 (1.8 needs `dbus` 0.8, which `geolocator_linux` refuses); test only:
+  `webview_flutter_platform_interface` 2.15.1, for `test/ui/fake_web_view_platform.dart`.
+

@@ -1,9 +1,10 @@
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/models/telemetry_ping.dart';
-import 'package:fleet_pulse_mobile/state/state.dart';
-import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/models/driver_availability.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/models/telemetry_ping.dart';
+import 'package:kinetix_courier/state/state.dart';
+import 'package:kinetix_courier/viewmodels/tracking_view_model.dart';
 import 'package:provider/provider.dart';
 
 part '../widgets/tracking/online_view.dart';
@@ -19,6 +20,11 @@ class TrackingScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Tracking'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'My credential',
+            onPressed: vm.openCredential,
+            icon: const Icon(Icons.verified_outlined),
+          ),
           IconButton(onPressed: vm.logout, icon: const Icon(Icons.logout)),
         ],
       ),
@@ -34,6 +40,7 @@ class TrackingScreen extends StatelessWidget {
           TrackingOnline(
             :final ConnectionStatus connection,
             :final bool onDuty,
+            :final DriverAvailability availability,
             :final bool permissionBlocked,
             :final TelemetryPing? lastPing,
             :final String? lastMessage,
@@ -42,6 +49,7 @@ class TrackingScreen extends StatelessWidget {
               vm: vm,
               connection: connection,
               onDuty: onDuty,
+              availability: availability,
               permissionBlocked: permissionBlocked,
               lastPing: lastPing,
               message: lastMessage,

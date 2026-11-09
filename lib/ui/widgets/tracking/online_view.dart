@@ -5,6 +5,7 @@ class _OnlineView extends StatelessWidget {
     required this.vm,
     required this.connection,
     required this.onDuty,
+    required this.availability,
     required this.permissionBlocked,
     required this.lastPing,
     required this.message,
@@ -13,6 +14,7 @@ class _OnlineView extends StatelessWidget {
   final TrackingViewModel vm;
   final ConnectionStatus connection;
   final bool onDuty;
+  final DriverAvailability availability;
   final bool permissionBlocked;
   final TelemetryPing? lastPing;
   final String? message;
@@ -29,6 +31,8 @@ class _OnlineView extends StatelessWidget {
             Text(connection.name),
           ],
         ),
+        const SizedBox(height: 16),
+        Text('Availability: ${availability.name}'),
         const SizedBox(height: 16),
         SwitchListTile(
           title: const Text('On duty'),

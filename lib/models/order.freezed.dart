@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Order {
 
-@OrderIdConverter() OrderId get id; OrderStatus get status;@JsonKey(name: 'weight_kg') int get weightKg; LatLng get pickup; LatLng get dropoff;@JsonKey(name: 'assigned_at') DateTime get assignedAt;
+@OrderIdConverter() OrderId get id; OrderStatus get status;@JsonKey(name: 'weight_kg') int get weightKg; LatLng get pickup; LatLng get dropoff;@JsonKey(name: 'assigned_at') DateTime get assignedAt;@JsonKey(name: 'pod_photo_url') String? get podPhotoUrl;@JsonKey(name: 'pod_signature') String? get podSignature;
 /// Create a copy of Order
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $OrderCopyWith<Order> get copyWith => _$OrderCopyWithImpl<Order>(this as Order, 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Order&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.weightKg, weightKg) || other.weightKg == weightKg)&&(identical(other.pickup, pickup) || other.pickup == pickup)&&(identical(other.dropoff, dropoff) || other.dropoff == dropoff)&&(identical(other.assignedAt, assignedAt) || other.assignedAt == assignedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Order&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.weightKg, weightKg) || other.weightKg == weightKg)&&(identical(other.pickup, pickup) || other.pickup == pickup)&&(identical(other.dropoff, dropoff) || other.dropoff == dropoff)&&(identical(other.assignedAt, assignedAt) || other.assignedAt == assignedAt)&&(identical(other.podPhotoUrl, podPhotoUrl) || other.podPhotoUrl == podPhotoUrl)&&(identical(other.podSignature, podSignature) || other.podSignature == podSignature));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,weightKg,pickup,dropoff,assignedAt);
+int get hashCode => Object.hash(runtimeType,id,status,weightKg,pickup,dropoff,assignedAt,podPhotoUrl,podSignature);
 
 @override
 String toString() {
-  return 'Order(id: $id, status: $status, weightKg: $weightKg, pickup: $pickup, dropoff: $dropoff, assignedAt: $assignedAt)';
+  return 'Order(id: $id, status: $status, weightKg: $weightKg, pickup: $pickup, dropoff: $dropoff, assignedAt: $assignedAt, podPhotoUrl: $podPhotoUrl, podSignature: $podSignature)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $OrderCopyWith<$Res>  {
   factory $OrderCopyWith(Order value, $Res Function(Order) _then) = _$OrderCopyWithImpl;
 @useResult
 $Res call({
-@OrderIdConverter() OrderId id, OrderStatus status,@JsonKey(name: 'weight_kg') int weightKg, LatLng pickup, LatLng dropoff,@JsonKey(name: 'assigned_at') DateTime assignedAt
+@OrderIdConverter() OrderId id, OrderStatus status,@JsonKey(name: 'weight_kg') int weightKg, LatLng pickup, LatLng dropoff,@JsonKey(name: 'assigned_at') DateTime assignedAt,@JsonKey(name: 'pod_photo_url') String? podPhotoUrl,@JsonKey(name: 'pod_signature') String? podSignature
 });
 
 
@@ -65,7 +65,7 @@ class _$OrderCopyWithImpl<$Res>
 
 /// Create a copy of Order
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? weightKg = null,Object? pickup = null,Object? dropoff = null,Object? assignedAt = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? status = null,Object? weightKg = null,Object? pickup = null,Object? dropoff = null,Object? assignedAt = null,Object? podPhotoUrl = freezed,Object? podSignature = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as OrderId,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
@@ -73,7 +73,9 @@ as OrderStatus,weightKg: null == weightKg ? _self.weightKg : weightKg // ignore:
 as int,pickup: null == pickup ? _self.pickup : pickup // ignore: cast_nullable_to_non_nullable
 as LatLng,dropoff: null == dropoff ? _self.dropoff : dropoff // ignore: cast_nullable_to_non_nullable
 as LatLng,assignedAt: null == assignedAt ? _self.assignedAt : assignedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as DateTime,podPhotoUrl: freezed == podPhotoUrl ? _self.podPhotoUrl : podPhotoUrl // ignore: cast_nullable_to_non_nullable
+as String?,podSignature: freezed == podSignature ? _self.podSignature : podSignature // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of Order
@@ -176,10 +178,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt, @JsonKey(name: 'pod_photo_url')  String? podPhotoUrl, @JsonKey(name: 'pod_signature')  String? podSignature)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Order() when $default != null:
-return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt);case _:
+return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt,_that.podPhotoUrl,_that.podSignature);case _:
   return orElse();
 
 }
@@ -197,10 +199,10 @@ return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt, @JsonKey(name: 'pod_photo_url')  String? podPhotoUrl, @JsonKey(name: 'pod_signature')  String? podSignature)  $default,) {final _that = this;
 switch (_that) {
 case _Order():
-return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt);case _:
+return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt,_that.podPhotoUrl,_that.podSignature);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -217,10 +219,10 @@ return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@OrderIdConverter()  OrderId id,  OrderStatus status, @JsonKey(name: 'weight_kg')  int weightKg,  LatLng pickup,  LatLng dropoff, @JsonKey(name: 'assigned_at')  DateTime assignedAt, @JsonKey(name: 'pod_photo_url')  String? podPhotoUrl, @JsonKey(name: 'pod_signature')  String? podSignature)?  $default,) {final _that = this;
 switch (_that) {
 case _Order() when $default != null:
-return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt);case _:
+return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,_that.assignedAt,_that.podPhotoUrl,_that.podSignature);case _:
   return null;
 
 }
@@ -232,7 +234,7 @@ return $default(_that.id,_that.status,_that.weightKg,_that.pickup,_that.dropoff,
 @JsonSerializable()
 
 class _Order implements Order {
-  const _Order({@OrderIdConverter() required this.id, required this.status, @JsonKey(name: 'weight_kg') required this.weightKg, required this.pickup, required this.dropoff, @JsonKey(name: 'assigned_at') required this.assignedAt});
+  const _Order({@OrderIdConverter() required this.id, required this.status, @JsonKey(name: 'weight_kg') required this.weightKg, required this.pickup, required this.dropoff, @JsonKey(name: 'assigned_at') required this.assignedAt, @JsonKey(name: 'pod_photo_url') this.podPhotoUrl, @JsonKey(name: 'pod_signature') this.podSignature});
   factory _Order.fromJson(Map<String, dynamic> json) => _$OrderFromJson(json);
 
 @override@OrderIdConverter() final  OrderId id;
@@ -241,6 +243,8 @@ class _Order implements Order {
 @override final  LatLng pickup;
 @override final  LatLng dropoff;
 @override@JsonKey(name: 'assigned_at') final  DateTime assignedAt;
+@override@JsonKey(name: 'pod_photo_url') final  String? podPhotoUrl;
+@override@JsonKey(name: 'pod_signature') final  String? podSignature;
 
 /// Create a copy of Order
 /// with the given fields replaced by the non-null parameter values.
@@ -255,16 +259,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Order&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.weightKg, weightKg) || other.weightKg == weightKg)&&(identical(other.pickup, pickup) || other.pickup == pickup)&&(identical(other.dropoff, dropoff) || other.dropoff == dropoff)&&(identical(other.assignedAt, assignedAt) || other.assignedAt == assignedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Order&&(identical(other.id, id) || other.id == id)&&(identical(other.status, status) || other.status == status)&&(identical(other.weightKg, weightKg) || other.weightKg == weightKg)&&(identical(other.pickup, pickup) || other.pickup == pickup)&&(identical(other.dropoff, dropoff) || other.dropoff == dropoff)&&(identical(other.assignedAt, assignedAt) || other.assignedAt == assignedAt)&&(identical(other.podPhotoUrl, podPhotoUrl) || other.podPhotoUrl == podPhotoUrl)&&(identical(other.podSignature, podSignature) || other.podSignature == podSignature));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,status,weightKg,pickup,dropoff,assignedAt);
+int get hashCode => Object.hash(runtimeType,id,status,weightKg,pickup,dropoff,assignedAt,podPhotoUrl,podSignature);
 
 @override
 String toString() {
-  return 'Order(id: $id, status: $status, weightKg: $weightKg, pickup: $pickup, dropoff: $dropoff, assignedAt: $assignedAt)';
+  return 'Order(id: $id, status: $status, weightKg: $weightKg, pickup: $pickup, dropoff: $dropoff, assignedAt: $assignedAt, podPhotoUrl: $podPhotoUrl, podSignature: $podSignature)';
 }
 
 
@@ -275,7 +279,7 @@ abstract mixin class _$OrderCopyWith<$Res> implements $OrderCopyWith<$Res> {
   factory _$OrderCopyWith(_Order value, $Res Function(_Order) _then) = __$OrderCopyWithImpl;
 @override @useResult
 $Res call({
-@OrderIdConverter() OrderId id, OrderStatus status,@JsonKey(name: 'weight_kg') int weightKg, LatLng pickup, LatLng dropoff,@JsonKey(name: 'assigned_at') DateTime assignedAt
+@OrderIdConverter() OrderId id, OrderStatus status,@JsonKey(name: 'weight_kg') int weightKg, LatLng pickup, LatLng dropoff,@JsonKey(name: 'assigned_at') DateTime assignedAt,@JsonKey(name: 'pod_photo_url') String? podPhotoUrl,@JsonKey(name: 'pod_signature') String? podSignature
 });
 
 
@@ -292,7 +296,7 @@ class __$OrderCopyWithImpl<$Res>
 
 /// Create a copy of Order
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? weightKg = null,Object? pickup = null,Object? dropoff = null,Object? assignedAt = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? status = null,Object? weightKg = null,Object? pickup = null,Object? dropoff = null,Object? assignedAt = null,Object? podPhotoUrl = freezed,Object? podSignature = freezed,}) {
   return _then(_Order(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as OrderId,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
@@ -300,7 +304,9 @@ as OrderStatus,weightKg: null == weightKg ? _self.weightKg : weightKg // ignore:
 as int,pickup: null == pickup ? _self.pickup : pickup // ignore: cast_nullable_to_non_nullable
 as LatLng,dropoff: null == dropoff ? _self.dropoff : dropoff // ignore: cast_nullable_to_non_nullable
 as LatLng,assignedAt: null == assignedAt ? _self.assignedAt : assignedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as DateTime,podPhotoUrl: freezed == podPhotoUrl ? _self.podPhotoUrl : podPhotoUrl // ignore: cast_nullable_to_non_nullable
+as String?,podSignature: freezed == podSignature ? _self.podSignature : podSignature // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

@@ -13,6 +13,8 @@ _Order _$OrderFromJson(Map<String, dynamic> json) => _Order(
   pickup: LatLng.fromJson(json['pickup'] as Map<String, dynamic>),
   dropoff: LatLng.fromJson(json['dropoff'] as Map<String, dynamic>),
   assignedAt: DateTime.parse(json['assigned_at'] as String),
+  podPhotoUrl: json['pod_photo_url'] as String?,
+  podSignature: json['pod_signature'] as String?,
 );
 
 Map<String, dynamic> _$OrderToJson(_Order instance) => <String, dynamic>{
@@ -22,6 +24,8 @@ Map<String, dynamic> _$OrderToJson(_Order instance) => <String, dynamic>{
   'pickup': instance.pickup,
   'dropoff': instance.dropoff,
   'assigned_at': instance.assignedAt.toIso8601String(),
+  'pod_photo_url': instance.podPhotoUrl,
+  'pod_signature': instance.podSignature,
 };
 
 const _$OrderStatusEnumMap = {

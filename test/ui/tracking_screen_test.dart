@@ -1,17 +1,27 @@
-import 'package:fleet_pulse_mobile/models/enums.dart';
-import 'package:fleet_pulse_mobile/state/tracking_state.dart';
-import 'package:fleet_pulse_mobile/ui/screens/tracking_screen.dart';
-import 'package:fleet_pulse_mobile/viewmodels/tracking_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/models/enums.dart';
+import 'package:kinetix_courier/state/tracking_state.dart';
+import 'package:kinetix_courier/ui/screens/tracking_screen.dart';
+import 'package:kinetix_courier/viewmodels/tracking_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
-class _MockVm extends Mock implements TrackingViewModel {}
+class _MockVm extends Mock implements TrackingViewModel {
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+
+  @override
+  bool get hasListeners => false;
+}
 
 Future<void> _pump(WidgetTester tester, TrackingViewModel vm) {
   return tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(splashFactory: InkRipple.splashFactory),
       home: ChangeNotifierProvider<TrackingViewModel>.value(
         value: vm,
         child: const TrackingScreen(),

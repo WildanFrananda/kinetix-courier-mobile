@@ -1,15 +1,25 @@
-import 'package:fleet_pulse_mobile/ui/screens/login_screen.dart';
-import 'package:fleet_pulse_mobile/viewmodels/login_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/ui/screens/login_screen.dart';
+import 'package:kinetix_courier/viewmodels/login_view_model.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
-class _MockVm extends Mock implements LoginViewModel {}
+class _MockVm extends Mock implements LoginViewModel {
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+
+  @override
+  bool get hasListeners => false;
+}
 
 Future<void> _pump(WidgetTester tester, LoginViewModel vm) {
   return tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(splashFactory: InkRipple.splashFactory),
       home: ChangeNotifierProvider<LoginViewModel>.value(
         value: vm,
         child: const LoginScreen(),
@@ -24,6 +34,43 @@ void main() {
   setUp(() {
     vm = new _MockVm();
     when(() => vm.submit()).thenAnswer((_) async {});
+    when(() => vm.submitCode()).thenAnswer((_) async {});
+    when(() => vm.awaitingCode).thenReturn(false);
+    when(() => vm.delayed).thenReturn(false);
+  });
+
+  testWidgets('a delayed sign-in shows the wait and holds the button', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.delayed).thenReturn(true);
+    when(
+      () => vm.error,
+    ).thenReturn('Too many sign-in attempts. Try again in 8 seconds.');
+    await _pump(tester, vm);
+
+    expect(
+      find.text('Too many sign-in attempts. Try again in 8 seconds.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(FilledButton));
+    verifyNever(() => vm.submit());
+  });
+
+  testWidgets('a delayed code holds Verify but not signing in again', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.delayed).thenReturn(true);
+    when(() => vm.awaitingCode).thenReturn(true);
+    when(() => vm.error).thenReturn('wait');
+    await _pump(tester, vm);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+    await tester.tap(find.text('Sign in again'));
+
+    verifyNever(() => vm.submitCode());
+    verify(() => vm.cancelCode()).called(1);
   });
 
   testWidgets('renders fields and submits', (WidgetTester tester) async {
@@ -51,5 +98,21 @@ void main() {
     when(() => vm.error).thenReturn('invalid_credentials');
     await _pump(tester, vm);
     expect(find.text('invalid_credentials'), findsOneWidget);
+  });
+
+  testWidgets('a second factor asks for the code and verifies it', (
+    WidgetTester tester,
+  ) async {
+    when(() => vm.submitting).thenReturn(false);
+    when(() => vm.error).thenReturn(null);
+    when(() => vm.awaitingCode).thenReturn(true);
+    await _pump(tester, vm);
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Authentication code'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+
+    verify(() => vm.submitCode()).called(1);
+    verifyNever(() => vm.submit());
   });
 }

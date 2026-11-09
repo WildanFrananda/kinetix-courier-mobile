@@ -1,13 +1,14 @@
 import 'dart:async';
 
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/maps/maps_launcher.dart';
-import 'package:fleet_pulse_mobile/models/order.dart';
-import 'package:fleet_pulse_mobile/repositories/order_repository.dart';
-import 'package:fleet_pulse_mobile/routes/app_router_state.dart';
-import 'package:fleet_pulse_mobile/state/order_ui_state.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart' hide Order;
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/maps/maps_launcher.dart';
+import 'package:kinetix_courier/models/models.dart';
+import 'package:kinetix_courier/repositories/order_repository.dart';
+import 'package:kinetix_courier/routes/app_router_state.dart';
+import 'package:kinetix_courier/state/job_update.dart';
+import 'package:kinetix_courier/state/order_ui_state.dart';
 
 @injectable
 class OrderViewModel extends ChangeNotifier {
@@ -17,21 +18,43 @@ class OrderViewModel extends ChangeNotifier {
   final OrderRepository _orders;
   final MapsLauncher _maps;
 
-  StreamSubscription<Order?>? _sub;
+  StreamSubscription<JobUpdate>? _jobSub;
   bool _bound = false;
+  bool _disposed = false;
 
   Order? _order;
   bool _submitting = false;
-  bool _cancelled = false;
+  OrderUiState? _ended;
   Failure? _error;
 
+  String? _podPhotoUrl;
+  String? _podSignature;
+  bool _photoUploading = false;
+
   OrderUiState get state {
-    if (_cancelled || _order == null) {
-      return const OrderCancelled();
+    final OrderUiState? ended = _ended;
+    final Order? order = _order;
+
+    if (ended != null) {
+      return ended;
     }
 
-    return OrderShowing(_order!, submitting: _submitting, error: _error);
+    if (order == null) {
+      return const OrderNoLongerActive();
+    }
+
+    return new OrderShowing(order, submitting: _submitting, error: _error);
   }
+
+  String? get podPhotoUrl => _podPhotoUrl;
+  String? get podSignature => _podSignature;
+  bool get photoUploading => _photoUploading;
+
+  bool get canDeliver =>
+      _podPhotoUrl != null &&
+      _podSignature != null &&
+      !_photoUploading &&
+      !_submitting;
 
   void bind(Order order) {
     if (_bound) {
@@ -40,7 +63,42 @@ class OrderViewModel extends ChangeNotifier {
 
     _bound = true;
     _order = order;
-    _sub = _orders.watchActiveOrder().listen(_onOrder);
+    _jobSub = _orders.watchJobs().listen(_onJob);
+    unawaited(_restoreDraft(order.id));
+  }
+
+  Future<void> attachPhoto(String localPath) async {
+    final Order? order = _order;
+
+    if (order == null) {
+      return;
+    }
+
+    _photoUploading = true;
+    _error = null;
+    _notify();
+
+    final Result<String> res = await _orders.attachPodPhoto(
+      order.id,
+      localPath,
+    );
+
+    res.fold((String photoUrl) => _podPhotoUrl = photoUrl, (Failure f) {
+      _error = f;
+    });
+    _photoUploading = false;
+    _notify();
+  }
+
+  Future<void> setPodSignature(String signatureData) async {
+    final Order? order = _order;
+
+    _podSignature = signatureData;
+    _notify();
+
+    if (order != null) {
+      await _orders.keepSignature(order.id, signatureData);
+    }
   }
 
   Future<void> pickup() async {
@@ -52,31 +110,46 @@ class OrderViewModel extends ChangeNotifier {
 
     _submitting = true;
     _error = null;
-    notifyListeners();
+    _notify();
 
-    final res = await _orders.pickup(order.id);
+    final Result<Unit> res = await _orders.pickup(order.id);
+
     res.fold((_) => _error = null, (Failure f) => _error = f);
     _submitting = false;
-    notifyListeners();
+    _notify();
   }
 
   Future<void> delivered() async {
     final Order? order = _order;
+    final String? photoUrl = _podPhotoUrl;
+    final String? signature = _podSignature;
 
-    if (order == null) {
+    if (order == null || photoUrl == null || signature == null || !canDeliver) {
       return;
     }
 
     _submitting = true;
     _error = null;
-    notifyListeners();
+    _notify();
 
-    final res = await _orders.delivered(order.id);
-    res.fold((_) => _router.pop(), (Failure f) {
-      _error = f;
-      _submitting = false;
-      notifyListeners();
-    });
+    final Result<Unit> res = await _orders.delivered(
+      order.id,
+      podPhotoUrl: photoUrl,
+      podSignature: signature,
+    );
+
+    res.fold(
+      (_) {
+        if (!_disposed) {
+          _router.pop();
+        }
+      },
+      (Failure f) {
+        _error = f;
+        _submitting = false;
+        _notify();
+      },
+    );
   }
 
   Future<void> navigateToPickup() async {
@@ -97,18 +170,56 @@ class OrderViewModel extends ChangeNotifier {
 
   void back() => _router.pop();
 
-  void _onOrder(Order? order) {
-    if (_order == null) {
-      _cancelled = true;
-    } else {
-      _order = order;
+  Future<void> _restoreDraft(OrderId orderId) async {
+    final DeliveryProofDraft draft = await _orders.proofDraft(orderId);
+
+    if (_disposed) {
+      return;
     }
-    notifyListeners();
+
+    _podPhotoUrl ??= draft.photoUrl;
+    _podSignature ??= draft.signature;
+    _notify();
+  }
+
+  void _onJob(JobUpdate update) {
+    final Order? current = _order;
+
+    if (current == null || _ended != null) {
+      return;
+    }
+
+    switch (update) {
+      case JobActive(:final Order order) when order.id == current.id:
+        _order = order;
+      case JobCancelled(:final OrderId id) when id == current.id:
+        _end(const OrderCancelled(), current.id);
+      case JobUnassigned(:final OrderId id) when id == current.id:
+        _end(const OrderUnassigned(), current.id);
+      case JobNone():
+        _end(const OrderNoLongerActive(), current.id);
+      case JobActive() || JobCancelled() || JobUnassigned():
+        return;
+    }
+
+    _notify();
+  }
+
+  void _end(OrderUiState ended, OrderId orderId) {
+    _ended = ended;
+    unawaited(_orders.discardProofDraft(orderId));
+  }
+
+  void _notify() {
+    if (!_disposed) {
+      notifyListeners();
+    }
   }
 
   @override
   void dispose() {
-    unawaited(_sub?.cancel());
+    _disposed = true;
+    unawaited(_jobSub?.cancel());
     super.dispose();
   }
 }

@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:fleet_pulse_mobile/core/core.dart';
-import 'package:fleet_pulse_mobile/mixins/retry_mixin.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kinetix_courier/core/core.dart';
+import 'package:kinetix_courier/mixins/retry_mixin.dart';
 
 class _Retrier with RetryMixin {}
 
@@ -75,6 +75,54 @@ void main() {
       }, maxAttempts: 4).ignore();
       async.elapse(const Duration(minutes: 5));
       expect(calls, 4);
+    });
+  });
+  test('with no attempt limit it retries until answered', () {
+    fakeAsync((FakeAsync async) {
+      int calls = 0;
+      Result<int>? result;
+
+      sut
+          .retry<int>(() async {
+            calls++;
+
+            return calls < 20
+                ? const Err<int>(TimeoutFailure())
+                : const Ok<int>(1);
+          }, maxAttempts: null)
+          .then((Result<int> r) => result = r)
+          .ignore();
+      async.elapse(const Duration(minutes: 10));
+
+      expect(calls, 20);
+      expect(result, isA<Ok<int>>());
+    });
+  });
+
+  test('stops as soon as the caller no longer wants the answer', () {
+    fakeAsync((FakeAsync async) {
+      int calls = 0;
+      bool wanted = true;
+      Result<int>? result;
+
+      sut
+          .retry<int>(
+            () async {
+              calls++;
+
+              return const Err<int>(NetworkFailure());
+            },
+            maxAttempts: null,
+            stillWanted: () => wanted,
+          )
+          .then((Result<int> r) => result = r)
+          .ignore();
+      async.elapse(const Duration(seconds: 4));
+      wanted = false;
+      async.elapse(const Duration(minutes: 1));
+
+      expect(calls, 3);
+      expect((result! as Err<int>).failure, isA<NetworkFailure>());
     });
   });
 }
