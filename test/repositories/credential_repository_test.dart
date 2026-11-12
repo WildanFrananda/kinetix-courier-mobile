@@ -454,6 +454,21 @@ void main() {
     );
 
     test(
+      'keeps waiting, without throwing, when the public state cannot be read or kept',
+      () async {
+        when(
+          () => api.holder(),
+        ).thenThrow(const FormatException('not the holder listing'));
+
+        expect(await standing(), CredentialStanding.pending);
+        expect(
+          await repository.refreshPublicState(force: true),
+          isA<Err<Unit>>(),
+        );
+      },
+    );
+
+    test(
       'is ready once a later read of the registry reaches the phone',
       () async {
         expect(await standing(), CredentialStanding.pending);

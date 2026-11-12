@@ -190,6 +190,9 @@ class CredentialFailure extends Failure {
     'insecure_answer':
         'That request does not say where to send the answer safely.',
     'holder_failed': 'The credential could not be shown. Try again.',
+    'storage_failed':
+        'This phone could not keep what seal sent. Open the credential '
+        'screen again.',
   };
 
   final String reason;
