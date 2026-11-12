@@ -149,9 +149,13 @@ class CredentialViewModel extends ChangeNotifier {
 
     _checking = true;
 
-    final Result<CourierCredential?> current = await _credentials.current();
+    final Result<CourierCredential?> current;
 
-    _checking = false;
+    try {
+      current = await _credentials.current();
+    } finally {
+      _checking = false;
+    }
 
     if (_isRequesting) {
       return;

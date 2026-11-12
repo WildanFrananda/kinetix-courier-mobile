@@ -285,6 +285,45 @@ void main() {
         });
       });
 
+      test('keeps asking after one check failed outright', () {
+        final List<Object> escaped = <Object>[];
+
+        fakeAsync((FakeAsync async) {
+          runZonedGuarded(() {
+            int asked = 0;
+
+            when(() => credentials.current()).thenAnswer((_) async {
+              asked += 1;
+
+              if (asked == 2) {
+                throw StateError('the vault could not be read');
+              }
+
+              return new Ok<CourierCredential?>(
+                asked < 3 ? pending : credential,
+              );
+            });
+
+            final CredentialViewModel vm = model();
+
+            unawaited(vm.load());
+            async.flushMicrotasks();
+
+            async.elapse(CredentialViewModel.pendingCheck);
+            async.elapse(CredentialViewModel.pendingCheck);
+
+            expect(asked, 3);
+            expect(
+              (vm.state as CredentialShowing).credential.standing,
+              CredentialStanding.issued,
+            );
+            vm.dispose();
+          }, (Object error, StackTrace stack) => escaped.add(error));
+        });
+
+        expect(escaped.single, isA<StateError>());
+      });
+
       test('never asks about a credential that is already ready', () {
         fakeAsync((FakeAsync async) {
           when(
