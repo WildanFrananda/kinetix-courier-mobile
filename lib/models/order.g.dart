@@ -9,23 +9,25 @@ part of 'order.dart';
 _Order _$OrderFromJson(Map<String, dynamic> json) => _Order(
   id: const OrderIdConverter().fromJson((json['id'] as num).toInt()),
   status: $enumDecode(_$OrderStatusEnumMap, json['status']),
-  weightKg: (json['weight_kg'] as num).toInt(),
+  weightKg: (json['weightKg'] as num).toInt(),
   pickup: LatLng.fromJson(json['pickup'] as Map<String, dynamic>),
   dropoff: LatLng.fromJson(json['dropoff'] as Map<String, dynamic>),
-  assignedAt: DateTime.parse(json['assigned_at'] as String),
-  podPhotoUrl: json['pod_photo_url'] as String?,
-  podSignature: json['pod_signature'] as String?,
+  assignedAt: DateTime.parse(json['assignedAt'] as String),
+  orderNumber: json['orderNumber'] as String?,
+  podPhotoUrl: json['podPhotoUrl'] as String?,
+  podSignature: json['podSignature'] as String?,
 );
 
 Map<String, dynamic> _$OrderToJson(_Order instance) => <String, dynamic>{
   'id': const OrderIdConverter().toJson(instance.id),
   'status': _$OrderStatusEnumMap[instance.status]!,
-  'weight_kg': instance.weightKg,
+  'weightKg': instance.weightKg,
   'pickup': instance.pickup,
   'dropoff': instance.dropoff,
-  'assigned_at': instance.assignedAt.toIso8601String(),
-  'pod_photo_url': instance.podPhotoUrl,
-  'pod_signature': instance.podSignature,
+  'assignedAt': instance.assignedAt.toIso8601String(),
+  'orderNumber': instance.orderNumber,
+  'podPhotoUrl': instance.podPhotoUrl,
+  'podSignature': instance.podSignature,
 };
 
 const _$OrderStatusEnumMap = {

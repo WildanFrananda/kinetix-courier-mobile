@@ -527,7 +527,15 @@ verifier only that it meets the verifier's minimums (infra `docs/SEAL-SERVICE.md
   `readAt` was made after that first read, and so after the issue. The phone's clock plays no part. The key is the
   placement (registry and leaf index), so a new generation's re-issue waits again. While a credential is `pending` the
   screen asks every 20 seconds (`CredentialViewModel.pendingCheck`), and stops once it is ready. "Show to a verifier"
-  needs ready, so this never reaches seal during a presentation.
+  needs ready, so this never reaches seal during a presentation. After a new generation a courier therefore sees
+  **Being issued** for a few minutes even once seal has issued: the issue itself (proof and confirmation), then two
+  snapshot reads with different `readAt`, at least seal's minute of cache apart (seen on 2026-11-11, generation 49).
+- **One failed check never stops the following.** `_checkPending` clears `_checking` in a `finally`: it used to clear
+  it after `current()` returned, so a single throw left the flag set and the 20-second poll asked nothing more for the
+  screen's life. `refreshPublicState` also answers a `FormatException` (`UnreadableAnswerFailure`) and a
+  `PlatformException` from secure storage (`CredentialFailure('storage_failed')`) as `Err`, so `current()` no longer
+  throws from that path. Whether one of them caused the **Being issued** that outlived the reset drill of 2026-11-09 is
+  not known: the drill left no log from the phone.
 - **The verifier's request** is a QR code `kinetix-seal:present?v=1&r=<registry>&p=<predicate row id>&c=<challenge>&a=<answer URL>`.
   The app scans it with `mobile_scanner`, refuses anything else, an `a` that is not `https`, another registry, or an
   unknown row, and shows the courier, before any proof, the predicate's label and minimums from its own copy of

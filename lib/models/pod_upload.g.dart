@@ -7,10 +7,10 @@ part of 'pod_upload.dart';
 // **************************************************************************
 
 _PodUpload _$PodUploadFromJson(Map<String, dynamic> json) => _PodUpload(
-  uploadUrl: json['upload_url'] as String,
-  photoUrl: json['photo_url'] as String,
+  uploadUrl: json['uploadUrl'] as String,
+  photoUrl: json['photoUrl'] as String,
   uploadHeaders:
-      (json['upload_headers'] as Map<String, dynamic>?)?.map(
+      (json['uploadHeaders'] as Map<String, dynamic>?)?.map(
         (k, e) => MapEntry(k, e as String),
       ) ??
       const <String, String>{},
@@ -18,7 +18,7 @@ _PodUpload _$PodUploadFromJson(Map<String, dynamic> json) => _PodUpload(
 
 Map<String, dynamic> _$PodUploadToJson(_PodUpload instance) =>
     <String, dynamic>{
-      'upload_url': instance.uploadUrl,
-      'photo_url': instance.photoUrl,
-      'upload_headers': instance.uploadHeaders,
+      'uploadUrl': instance.uploadUrl,
+      'photoUrl': instance.photoUrl,
+      'uploadHeaders': instance.uploadHeaders,
     };

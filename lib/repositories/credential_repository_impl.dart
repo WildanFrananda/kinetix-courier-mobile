@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 import 'package:kinetix_courier/config/app_config.dart';
 import 'package:kinetix_courier/core/core.dart';
@@ -171,6 +172,12 @@ class CredentialRepositoryImpl implements CredentialRepository {
       return const Ok<Unit>(Unit.unit);
     } on DioException catch (e) {
       return new Err<Unit>(_failureOf(e));
+    } on FormatException {
+      return const Err<Unit>(
+        UnreadableAnswerFailure('seal answered in a form this app cannot read'),
+      );
+    } on PlatformException {
+      return const Err<Unit>(CredentialFailure('storage_failed'));
     }
   }
 

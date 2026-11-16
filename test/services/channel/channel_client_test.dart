@@ -5,6 +5,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kinetix_courier/models/models.dart';
 import 'package:kinetix_courier/services/channel/channel_client.dart';
+import 'package:kinetix_courier/services/channel/channel_event.dart';
 import 'package:kinetix_courier/services/channel/channel_exception.dart';
 import 'package:kinetix_courier/services/channel/channel_reply.dart';
 import 'package:kinetix_courier/services/channel/channel_socket.dart';
@@ -45,73 +46,134 @@ void main() {
     refreshToken: 'refresh-tok',
   );
 
+  final RegExp uuidv7Pattern = new RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+  );
+
   late FakeSocket fake;
   late ChannelClient client;
 
   setUp(() {
     fake = new FakeSocket()..completeReady();
     client = new ChannelClient.withConnector(
-      (Uri uri, Iterable<String> protocols) => fake,
+      (Uri uri, Map<String, dynamic> headers) => fake,
     );
   });
 
   tearDown(() => client.dispose());
 
-  List<dynamic> lastFrame() => jsonDecode(fake.sent.last) as List<dynamic>;
+  Map<String, dynamic> lastFrame() =>
+      (jsonDecode(fake.sent.last) as Map<dynamic, dynamic>)
+          .cast<String, dynamic>();
 
-  void reply(
-    List<dynamic> frame,
-    String status, [
-    Map<String, dynamic> response = const <String, dynamic>{},
-  ]) {
-    fake.emit(
-      jsonEncode(<dynamic>[
-        frame[0],
-        frame[1],
-        frame[2],
-        'phx_reply',
-        <String, dynamic>{'status': status, 'response': response},
-      ]),
+  void emitSnapshot({
+    String dutyStatus = 'offline',
+    Map<String, dynamic>? activeOrder,
+    FakeSocket? on,
+  }) {
+    final FakeSocket target = on ?? fake;
+
+    target.emit(
+      jsonEncode(<String, dynamic>{
+        'event': 'matching.job.snapshot',
+        'eventId': '019a0000-0000-7000-8000-000000000001',
+        'schemaVersion': 1,
+        'orderId': activeOrder?['orderNumber'],
+        'sequence': activeOrder?['eventSequence'],
+        'occurredAt': '2026-11-16T00:00:00Z',
+        'data': <String, dynamic>{
+          'dutyStatus': dutyStatus,
+          'activeOrder': activeOrder,
+        },
+      }),
     );
   }
 
-  Future<List<dynamic>> joinFrame() async {
+  void ack(
+    Map<String, dynamic> request, [
+    Map<String, dynamic> data = const <String, dynamic>{},
+    FakeSocket? on,
+  ]) {
+    final FakeSocket target = on ?? fake;
+    final String event = request['event'] == 'system.ping'
+        ? 'system.pong'
+        : 'command.ack';
+
+    target.emit(
+      jsonEncode(<String, dynamic>{
+        'event': event,
+        'requestId': request['requestId'],
+        'schemaVersion': 1,
+        'occurredAt': '2026-11-16T00:00:00Z',
+        'data': data,
+      }),
+    );
+  }
+
+  void commandError({
+    String? requestId,
+    required String reason,
+    String code = 'ERROR',
+    bool retryable = false,
+  }) {
+    fake.emit(
+      jsonEncode(<String, dynamic>{
+        'event': 'command.error',
+        'requestId': requestId,
+        'schemaVersion': 1,
+        'occurredAt': '2026-11-16T00:00:00Z',
+        'error': <String, dynamic>{
+          'code': code,
+          'reason': reason,
+          'message': reason,
+          'retryable': retryable,
+        },
+      }),
+    );
+  }
+
+  Future<void> openConnected({String dutyStatus = 'offline'}) async {
     unawaited(client.connect(session, wsBase: 'wss://edge.test'));
     await pump();
-
-    return jsonDecode(fake.sent.single) as List<dynamic>;
+    emitSnapshot(dutyStatus: dutyStatus);
+    await pump();
   }
 
-  test('the socket is the gateway route, with the protocol version', () {
+  test('the socket is the unified edge/matching events route without query params', () {
     expect(
       ChannelClient.socketUri('wss://edge.test').toString(),
-      'wss://edge.test/ws/v1/matching/driver?vsn=2.0.0',
+      'wss://edge.test/ws/v1/events',
     );
   });
 
-  test('the token is offered beside phoenix, unpadded standard base64', () {
-    final List<String> protocols = ChannelClient.protocolsFor('a.b.c');
-
-    expect(protocols, <String>['phoenix', 'base64url.bearer.phx.YS5iLmM']);
+  test('the bearer token is placed in the upgrade Authorization header', () {
+    expect(ChannelClient.headersFor('a.b.c'), <String, String>{
+      'Authorization': 'Bearer a.b.c',
+    });
   });
 
-  test('joins driver topic and connects on ok reply', () async {
-    final List<dynamic> join = await joinFrame();
-    expect(join[2], 'driver:1');
-    expect(join[3], 'phx_join');
+  test('connects on matching.job.snapshot without sending a join frame and emits the snapshot', () async {
+    final List<ChannelEvent> received = <ChannelEvent>[];
+    client.events.listen(received.add);
 
-    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
-    await pump();
+    await openConnected(dutyStatus: 'online');
 
+    expect(fake.sent, isEmpty);
     expect(client.status, ConnectionStatus.connected);
-    expect(client.joinStatus, 'offline');
+    expect(client.joinStatus, 'online');
+    expect(received, hasLength(1));
+    expect(received.single.event, 'matching.job.snapshot');
+    expect(received.single.payload['dutyStatus'], 'online');
+    expect(received.single.eventId, '019a0000-0000-7000-8000-000000000001');
   });
 
-  test('forbidden join emits refused, stays disconnected', () async {
+  test('forbidden error during connect emits refused, stays disconnected', () async {
     bool refused = false;
     client.refused.listen((_) => refused = true);
 
-    reply(await joinFrame(), 'error', <String, dynamic>{'reason': 'forbidden'});
+    unawaited(client.connect(session, wsBase: 'wss://edge.test'));
+    await pump();
+    commandError(reason: 'forbidden', code: 'FORBIDDEN');
     await pump();
 
     expect(refused, isTrue);
@@ -119,16 +181,16 @@ void main() {
   });
 
   test(
-    'a join refused as pending approval says so, and does not reconnect',
+    'a connect refused as pending approval says so, and does not reconnect',
     () async {
       bool notApproved = false;
       bool refused = false;
       client.notApproved.listen((_) => notApproved = true);
       client.refused.listen((_) => refused = true);
 
-      reply(await joinFrame(), 'error', <String, dynamic>{
-        'reason': 'pending_approval',
-      });
+      unawaited(client.connect(session, wsBase: 'wss://edge.test'));
+      await pump();
+      commandError(reason: 'pending_approval', code: 'PENDING_APPROVAL');
       await pump();
 
       expect(notApproved, isTrue);
@@ -137,47 +199,69 @@ void main() {
     },
   );
 
-  test('a join refused for a reason it does not know is retried', () async {
+  test('a connect refused for an unknown reason is retried', () async {
     bool refused = false;
     client.refused.listen((_) => refused = true);
 
-    reply(await joinFrame(), 'error', <String, dynamic>{'reason': 'busy_node'});
+    unawaited(client.connect(session, wsBase: 'wss://edge.test'));
+    await pump();
+    commandError(reason: 'busy_node', code: 'UNAVAILABLE', retryable: true);
     await pump();
 
     expect(refused, isFalse);
     expect(client.status, ConnectionStatus.reconnecting);
   });
 
-  test('reply is correlated by ref', () async {
-    final List<dynamic> join = await joinFrame();
-    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
-    await pump();
+  test('command.ack is correlated by requestId and uses camelCase command envelope', () async {
+    await openConnected();
 
     final Future<ChannelReply> replyFuture = client.setStatus('online');
     await pump();
-    final List<dynamic> frame = lastFrame();
-    expect(frame[3], 'status');
-    reply(frame, 'ok', <String, dynamic>{'status': 'online'});
+    final Map<String, dynamic> frame = lastFrame();
+    expect(frame['event'], 'courier.duty.set');
+    expect(frame['schemaVersion'], 1);
+    expect(frame['requestId'], matches(uuidv7Pattern));
+    expect(frame['sentAt'], isA<String>());
+    expect(frame['data'], <String, dynamic>{'status': 'online'});
+    ack(frame, <String, dynamic>{'status': 'online'});
 
     final ChannelReply answered = await replyFuture;
     expect(answered.isOk, isTrue);
     expect(answered.response['status'], 'online');
   });
 
-  test('a push before the join is answered is not sent', () async {
-    await joinFrame();
+  test('command.error correlated by requestId resolves as error ChannelReply with reason', () async {
+    await openConnected();
+
+    final Future<ChannelReply> replyFuture = client.pickup(42);
+    await pump();
+    final Map<String, dynamic> frame = lastFrame();
+    expect(frame['event'], 'matching.job.pickup');
+    expect(frame['data'], <String, dynamic>{'orderId': 42});
+    commandError(
+      requestId: frame['requestId'] as String,
+      reason: 'invalid_transition',
+      code: 'INVALID_TRANSITION',
+    );
+
+    final ChannelReply answered = await replyFuture;
+    expect(answered.isOk, isFalse);
+    expect(answered.reason, 'invalid_transition');
+  });
+
+  test('a push before the snapshot arrives is not sent', () async {
+    unawaited(client.connect(session, wsBase: 'wss://edge.test'));
+    await pump();
 
     await expectLater(
       client.setStatus('online'),
       throwsA(isA<ChannelException>()),
     );
-    expect(fake.sent, hasLength(1));
+    expect(fake.sent, isEmpty);
   });
 
   test('an unreadable frame is dropped, the socket stays up', () async {
-    final List<dynamic> join = await joinFrame();
-    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
-    await pump();
+    await openConnected();
 
     fake.emit('not json');
     await pump();
@@ -186,11 +270,9 @@ void main() {
   });
 
   test(
-    'positions kept offline go as one ping_batch with the ping fields',
+    'positions kept offline go as courier.location.batch with camelCase ping fields',
     () async {
-      final List<dynamic> join = await joinFrame();
-      reply(join, 'ok', <String, dynamic>{'status': 'offline'});
-      await pump();
+      await openConnected();
 
       unawaited(
         client
@@ -211,29 +293,59 @@ void main() {
       );
       await pump();
 
-      final List<dynamic> frame = lastFrame();
-      expect(frame[3], 'ping_batch');
-      expect(frame[4], <String, dynamic>{
+      final Map<String, dynamic> frame = lastFrame();
+      expect(frame['event'], 'courier.location.batch');
+      expect(frame['data'], <String, dynamic>{
         'pings': <Map<String, dynamic>>[
           <String, dynamic>{
             'latitude': -6.2,
             'longitude': 106.8,
-            'recorded_at': '2026-10-21T08:00:00.000Z',
-            'speed_kmh': 30.0,
+            'recordedAt': '2026-10-21T08:00:00.000Z',
+            'speedKmh': 30.0,
           },
           <String, dynamic>{
             'latitude': -6.3,
             'longitude': 106.9,
-            'recorded_at': '2026-10-21T08:00:04.000Z',
+            'recordedAt': '2026-10-21T08:00:04.000Z',
           },
         ],
       });
     },
   );
-  test('a batch of another courier is never sent on this socket', () async {
-    final List<dynamic> join = await joinFrame();
-    reply(join, 'ok', <String, dynamic>{'status': 'offline'});
+
+  test('podUpload and delivered use camelCase event names and payload fields', () async {
+    await openConnected();
+
+    unawaited(
+      client
+          .podUpload(9, 'abc123')
+          .then((_) {}, onError: (Object _) {}),
+    );
     await pump();
+    final Map<String, dynamic> uploadFrame = lastFrame();
+    expect(uploadFrame['event'], 'matching.job.podUpload');
+    expect(uploadFrame['data'], <String, dynamic>{
+      'orderId': 9,
+      'photoSha256': 'abc123',
+    });
+
+    unawaited(
+      client
+          .delivered(9, podPhotoUrl: 'https://cdn.test/p.jpg', podSignature: 'sig')
+          .then((_) {}, onError: (Object _) {}),
+    );
+    await pump();
+    final Map<String, dynamic> deliveredFrame = lastFrame();
+    expect(deliveredFrame['event'], 'matching.job.delivered');
+    expect(deliveredFrame['data'], <String, dynamic>{
+      'orderId': 9,
+      'podPhotoUrl': 'https://cdn.test/p.jpg',
+      'podSignature': 'sig',
+    });
+  });
+
+  test('a batch of another courier is never sent on this socket', () async {
+    await openConnected();
 
     await expectLater(
       client.pingBatch(const DriverId(2), <TelemetryPing>[
@@ -245,7 +357,7 @@ void main() {
       ]),
       throwsA(isA<ChannelException>()),
     );
-    expect(fake.sent, hasLength(1));
+    expect(fake.sent, isEmpty);
   });
 
   test(
@@ -255,7 +367,7 @@ void main() {
       int opened = 0;
       final ChannelClient sut = new ChannelClient.withConnector((
         Uri uri,
-        Iterable<String> _,
+        Map<String, dynamic> _,
       ) {
         opened++;
 
@@ -284,28 +396,13 @@ void main() {
     late List<FakeSocket> opened;
     late ChannelClient sut;
 
-    void replyOn(
-      FakeSocket socket,
-      List<dynamic> frame,
-      Map<String, dynamic> response,
-    ) {
-      socket.emit(
-        jsonEncode(<dynamic>[
-          frame[0],
-          frame[1],
-          frame[2],
-          'phx_reply',
-          <String, dynamic>{'status': 'ok', 'response': response},
-        ]),
-      );
-    }
-
-    List<dynamic> lastOn(FakeSocket socket) =>
-        jsonDecode(socket.sent.last) as List<dynamic>;
+    Map<String, dynamic> lastOn(FakeSocket socket) =>
+        (jsonDecode(socket.sent.last) as Map<dynamic, dynamic>)
+            .cast<String, dynamic>();
 
     void joined(FakeAsync async) {
       opened = <FakeSocket>[];
-      sut = new ChannelClient.withConnector((Uri uri, Iterable<String> _) {
+      sut = new ChannelClient.withConnector((Uri uri, Map<String, dynamic> _) {
         final FakeSocket socket = new FakeSocket()..completeReady();
 
         opened.add(socket);
@@ -314,9 +411,7 @@ void main() {
       });
       sut.connect(session, wsBase: 'wss://edge.test').ignore();
       async.flushMicrotasks();
-      replyOn(opened.single, lastOn(opened.single), <String, dynamic>{
-        'status': 'offline',
-      });
+      emitSnapshot(on: opened.single);
       async.flushMicrotasks();
       expect(sut.status, ConnectionStatus.connected);
     }
@@ -326,7 +421,7 @@ void main() {
         joined(async);
 
         async.elapse(const Duration(seconds: 30));
-        expect(lastOn(opened.single)[3], 'heartbeat');
+        expect(lastOn(opened.single)['event'], 'system.ping');
 
         async.elapse(const Duration(seconds: 15));
 
@@ -341,7 +436,9 @@ void main() {
         joined(async);
 
         async.elapse(const Duration(seconds: 30));
-        replyOn(opened.single, lastOn(opened.single), <String, dynamic>{});
+        ack(lastOn(opened.single), <String, dynamic>{
+          'serverTime': '2026-11-16T00:00:30Z',
+        }, opened.single);
         async.elapse(const Duration(seconds: 15));
 
         expect(sut.status, ConnectionStatus.connected);
@@ -359,7 +456,7 @@ void main() {
 
           sut.setStatus('online').ignore();
           async.elapse(const Duration(seconds: 6));
-          expect(lastOn(opened.single)[3], 'heartbeat');
+          expect(lastOn(opened.single)['event'], 'system.ping');
 
           async.elapse(const Duration(seconds: 11));
 

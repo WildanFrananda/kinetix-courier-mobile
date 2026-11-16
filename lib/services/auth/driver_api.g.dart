@@ -8,6 +8,7 @@ part of 'driver_api.dart';
 // RetrofitGenerator
 // **************************************************************************
 
+// ignore_for_file: type=lint
 // ignore_for_file: unnecessary_brace_in_string_interps,no_leading_underscores_for_local_identifiers,unused_element,unnecessary_string_interpolations,unused_element_parameter,avoid_unused_constructor_parameters,unreachable_from_main,avoid_redundant_argument_values
 
 class _DriverApi implements DriverApi {
@@ -31,7 +32,8 @@ class _DriverApi implements DriverApi {
       r'X-Firebase-AppCheck': proof,
     };
     _headers.removeWhere((k, v) => v == null);
-    final _data = body;
+    final _data = <String, dynamic>{};
+    _data.addAll(body.toJson());
     final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -56,7 +58,8 @@ class _DriverApi implements DriverApi {
       r'X-Firebase-AppCheck': proof,
     };
     _headers.removeWhere((k, v) => v == null);
-    final _data = body;
+    final _data = <String, dynamic>{};
+    _data.addAll(body.toJson());
     final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -84,7 +87,8 @@ class _DriverApi implements DriverApi {
       r'X-Firebase-AppCheck': proof,
     };
     _headers.removeWhere((k, v) => v == null);
-    final _data = body;
+    final _data = <String, dynamic>{};
+    _data.addAll(body.toJson());
     final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -109,7 +113,8 @@ class _DriverApi implements DriverApi {
       r'X-Firebase-AppCheck': proof,
     };
     _headers.removeWhere((k, v) => v == null);
-    final _data = body;
+    final _data = <String, dynamic>{};
+    _data.addAll(body.toJson());
     final _options = _setStreamType<dynamic>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
@@ -131,7 +136,8 @@ class _DriverApi implements DriverApi {
     final queryParameters = <String, dynamic>{};
     final _headers = <String, dynamic>{r'Authorization': authorization};
     _headers.removeWhere((k, v) => v == null);
-    final _data = body;
+    final _data = <String, dynamic>{};
+    _data.addAll(body.toJson());
     final _options = _setStreamType<void>(
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(

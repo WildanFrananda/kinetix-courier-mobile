@@ -12,12 +12,13 @@ abstract class Order with _$Order {
   const factory Order({
     @OrderIdConverter() required OrderId id,
     required OrderStatus status,
-    @JsonKey(name: 'weight_kg') required int weightKg,
+    required int weightKg,
     required LatLng pickup,
     required LatLng dropoff,
-    @JsonKey(name: 'assigned_at') required DateTime assignedAt,
-    @JsonKey(name: 'pod_photo_url') String? podPhotoUrl,
-    @JsonKey(name: 'pod_signature') String? podSignature,
+    required DateTime assignedAt,
+    String? orderNumber,
+    String? podPhotoUrl,
+    String? podSignature,
   }) = _Order;
 
   factory Order.fromJson(Map<String, dynamic> json) => _$OrderFromJson(json);
