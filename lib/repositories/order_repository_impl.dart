@@ -212,10 +212,10 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
 
   JobUpdate? _toJobUpdate(ChannelEvent e) {
     return switch (e.event) {
-      'active_order' => _activeOrder(e.payload['order']),
-      'order_assigned' => _assigned(e.payload),
-      'order_updated' => _updated(e.payload),
-      'order_unassigned' => _unassigned(e.payload),
+      'matching.job.snapshot' => _activeOrder(e.payload['activeOrder']),
+      'matching.job.assigned' => _assigned(e.payload['order']),
+      'matching.job.updated' => _updated(e.payload['order']),
+      'matching.job.unassigned' => _unassigned(e.payload),
       _ => null,
     };
   }
@@ -230,17 +230,22 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
     return order == null ? null : new JobActive(order);
   }
 
-  JobUpdate? _assigned(Map<String, dynamic> payload) {
-    final Order? order = _orderOf(payload);
+  JobUpdate? _assigned(Object? raw) {
+    final Order? order = _orderOf(raw);
 
     return order == null ? null : new JobActive(order);
   }
 
-  JobUpdate? _updated(Map<String, dynamic> payload) {
+  JobUpdate? _updated(Object? raw) {
+    if (raw is! Map<dynamic, dynamic>) {
+      return null;
+    }
+
+    final Map<String, dynamic> payload = raw.cast<String, dynamic>();
     final Object? id = payload['id'];
 
     if (id is int &&
-        (payload['status'] == 'pending' || payload['assigned_at'] == null)) {
+        (payload['status'] == 'pending' || payload['assignedAt'] == null)) {
       return new JobUnassigned(new OrderId(id));
     }
 
@@ -268,7 +273,7 @@ class OrderRepositoryImpl with RetryMixin implements OrderRepository {
 
     final Map<String, dynamic> json = raw.cast<String, dynamic>();
 
-    if (json['status'] == 'pending' || json['assigned_at'] == null) {
+    if (json['status'] == 'pending' || json['assignedAt'] == null) {
       return null;
     }
 

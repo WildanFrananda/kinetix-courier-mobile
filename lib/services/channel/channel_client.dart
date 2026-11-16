@@ -20,7 +20,7 @@ import 'package:kinetix_courier/services/channel/push_timeout_exception.dart';
 import 'package:kinetix_courier/services/channel/ws_channel_socket.dart';
 
 typedef SocketConnector =
-    ChannelSocket Function(Uri uri, Iterable<String> protocols);
+    ChannelSocket Function(Uri uri, Map<String, dynamic> headers);
 
 @lazySingleton
 class ChannelClient {
@@ -33,14 +33,13 @@ class ChannelClient {
   static const Duration heartbeatTimeout = Duration(seconds: 10);
   static const Duration pushTimeout = Duration(seconds: 5);
   static const Duration joinTimeout = Duration(seconds: 10);
+  static const int schemaVersion = 1;
 
-  static const String _tokenProtocolPrefix = 'base64url.bearer.phx.';
   static const String _notApprovedReason = 'pending_approval';
   static const Set<String> _refusingJoinReasons = <String>{
     'forbidden',
     'not_found',
-    'invalid_topic',
-    'unknown_topic',
+    'unauthorized',
   };
 
   final SocketConnector _connect;
@@ -61,13 +60,13 @@ class ChannelClient {
 
   ChannelSocket? _socket;
   StreamSubscription<dynamic>? _sub;
+  Completer<ChannelEvent>? _snapshotCompleter;
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
 
   DriverSession? _session;
   String _wsBase = '';
   int _ref = 0;
-  String? _joinRef;
   String? _joinStatus;
   int _backoffAttempt = 0;
   bool _probing = false;
@@ -81,20 +80,14 @@ class ChannelClient {
   String? get joinStatus => _joinStatus;
   DriverId? get driverId => _session?.driverId;
 
-  String get _topic => 'driver:${_session?.driverId?.value}';
+  @visibleForTesting
+  static Uri socketUri(String wsBase) =>
+      Uri.parse(wsBase).replace(path: AppConfig.driverSocketPath);
 
   @visibleForTesting
-  static Uri socketUri(String wsBase) => Uri.parse(wsBase).replace(
-    path: AppConfig.driverSocketPath,
-    queryParameters: <String, String>{'vsn': AppConfig.socketProtocolVersion},
-  );
-
-  @visibleForTesting
-  static List<String> protocolsFor(String token) {
-    final String encoded = base64Encode(utf8.encode(token)).replaceAll('=', '');
-
-    return <String>['phoenix', '$_tokenProtocolPrefix$encoded'];
-  }
+  static Map<String, String> headersFor(String token) => <String, String>{
+    'Authorization': 'Bearer $token',
+  };
 
   Future<void> connect(DriverSession session, {String? wsBase}) async {
     _reconnectTimer?.cancel();
@@ -114,7 +107,8 @@ class ChannelClient {
     _setStatus(ConnectionStatus.disconnected);
   }
 
-  Future<ChannelReply> ping(TelemetryPing p) => push('ping', _position(p));
+  Future<ChannelReply> ping(TelemetryPing p) =>
+      push('courier.location.ping', _position(p));
 
   Future<ChannelReply> pingBatch(DriverId owner, List<TelemetryPing> pings) {
     if (_session?.driverId != owner) {
@@ -123,7 +117,7 @@ class ChannelClient {
       );
     }
 
-    return push('ping_batch', <String, dynamic>{
+    return push('courier.location.batch', <String, dynamic>{
       'pings': <Map<String, dynamic>>[
         for (final TelemetryPing p in pings) _position(p),
       ],
@@ -131,24 +125,24 @@ class ChannelClient {
   }
 
   Future<ChannelReply> setStatus(String status) =>
-      push('status', <String, dynamic>{'status': status});
+      push('courier.duty.set', <String, dynamic>{'status': status});
 
   Future<ChannelReply> pickup(int orderId) =>
-      push('pickup', <String, dynamic>{'order_id': orderId});
+      push('matching.job.pickup', <String, dynamic>{'orderId': orderId});
 
   Future<ChannelReply> podUpload(int orderId, String photoSha256) => push(
-    'pod_upload',
-    <String, dynamic>{'order_id': orderId, 'photo_sha256': photoSha256},
+    'matching.job.podUpload',
+    <String, dynamic>{'orderId': orderId, 'photoSha256': photoSha256},
   );
 
   Future<ChannelReply> delivered(
     int orderId, {
     String? podPhotoUrl,
     String? podSignature,
-  }) => push('delivered', <String, dynamic>{
-    'order_id': orderId,
-    'pod_photo_url': ?podPhotoUrl,
-    'pod_signature': ?podSignature,
+  }) => push('matching.job.delivered', <String, dynamic>{
+    'orderId': orderId,
+    'podPhotoUrl': ?podPhotoUrl,
+    'podSignature': ?podSignature,
   });
 
   Future<ChannelReply> push(String event, Map<String, dynamic> payload) {
@@ -162,17 +156,25 @@ class ChannelClient {
       );
     }
 
-    final String ref = (++_ref).toString();
+    final String requestId = _nextRequestId();
     final Completer<ChannelReply> completer = new Completer<ChannelReply>();
 
-    _pending[ref] = completer;
+    _pending[requestId] = completer;
 
-    socket.add(jsonEncode(<dynamic>[_joinRef, ref, _topic, event, payload]));
+    socket.add(
+      jsonEncode(<String, dynamic>{
+        'event': event,
+        'requestId': requestId,
+        'schemaVersion': schemaVersion,
+        'sentAt': DateTime.now().toUtc().toIso8601String(),
+        'data': payload,
+      }),
+    );
 
     return completer.future.timeout(
       pushTimeout,
       onTimeout: () {
-        _pending.remove(ref);
+        _pending.remove(requestId);
         _probe();
         throw new PushTimeoutException(event);
       },
@@ -182,10 +184,40 @@ class ChannelClient {
   Map<String, dynamic> _position(TelemetryPing p) => <String, dynamic>{
     'latitude': p.latitude,
     'longitude': p.longitude,
-    'recorded_at': p.recordedAt.toUtc().toIso8601String(),
-    'speed_kmh': ?p.speedKmh,
-    'bearing_deg': ?p.bearingDeg,
+    'recordedAt': p.recordedAt.toUtc().toIso8601String(),
+    'speedKmh': ?p.speedKmh,
+    'bearingDeg': ?p.bearingDeg,
   };
+
+  String _nextRequestId() {
+    final int ms = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final int seq = (++_ref) & 0x0FFF;
+    final List<int> bytes = <int>[
+      (ms >> 40) & 0xFF,
+      (ms >> 32) & 0xFF,
+      (ms >> 24) & 0xFF,
+      (ms >> 16) & 0xFF,
+      (ms >> 8) & 0xFF,
+      ms & 0xFF,
+      0x70 | ((seq >> 8) & 0x0F),
+      seq & 0xFF,
+      0x80 | _rng.nextInt(64),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+      _rng.nextInt(256),
+    ];
+    final String hex = <String>[
+      for (final int value in bytes) value.toRadixString(16).padLeft(2, '0'),
+    ].join();
+
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+        '${hex.substring(20, 32)}';
+  }
 
   void reconnectNow() {
     if (_session == null ||
@@ -220,7 +252,7 @@ class ChannelClient {
     try {
       final ChannelSocket socket = _connect(
         socketUri(_wsBase),
-        protocolsFor(session.token),
+        headersFor(session.token),
       );
 
       await socket.ready;
@@ -231,6 +263,8 @@ class ChannelClient {
         return;
       }
 
+      final Completer<ChannelEvent> snapshot = new Completer<ChannelEvent>();
+      _snapshotCompleter = snapshot;
       _socket = socket;
       _sub = socket.stream.listen(
         _onMessage,
@@ -238,10 +272,24 @@ class ChannelClient {
         onError: (Object _, _) => _onClosed(),
         cancelOnError: true,
       );
-      await _join(driver);
+
+      final ChannelEvent initial = await snapshot.future.timeout(joinTimeout);
+
+      if (!identical(_session, session)) {
+        await socket.close();
+
+        return;
+      }
+
+      final Object? duty = initial.payload['dutyStatus'];
+      _joinStatus = duty is String ? duty : null;
       _backoffAttempt = 0;
       _setStatus(ConnectionStatus.connected);
       _startHeartbeat();
+
+      if (!_events.isClosed) {
+        _events.add(initial);
+      }
     } on HandshakeRefusedException catch (e) {
       AppLogger.debug('socket upgrade answered ${e.statusCode}');
       await _teardownSocket();
@@ -269,33 +317,6 @@ class ChannelClient {
     }
   }
 
-  Future<void> _join(DriverId driver) async {
-    final String joinRef = (++_ref).toString();
-    final Completer<ChannelReply> completer = new Completer<ChannelReply>();
-
-    _joinRef = joinRef;
-    _pending[joinRef] = completer;
-
-    _socket!.add(
-      jsonEncode(<dynamic>[
-        joinRef,
-        joinRef,
-        'driver:${driver.value}',
-        'phx_join',
-        <String, dynamic>{},
-      ]),
-    );
-
-    final ChannelReply reply = await completer.future.timeout(joinTimeout);
-
-    if (!reply.isOk) {
-      throw new JoinRefusedException(reply.reason ?? reply.status);
-    }
-
-    final Object? status = reply.response['status'];
-    _joinStatus = status is String ? status : null;
-  }
-
   void _refuse(StreamController<void> signal) {
     _session = null;
     _joinStatus = null;
@@ -307,51 +328,103 @@ class ChannelClient {
   }
 
   void _onMessage(dynamic raw) {
-    final List<dynamic> frame;
-    final String? ref;
+    final Map<String, dynamic> frame;
     final String event;
-    final Map<String, dynamic> payload;
 
     try {
-      frame = jsonDecode(raw as String) as List<dynamic>;
-      ref = frame[1] as String?;
-      event = frame[3] as String;
-      payload = (frame[4] as Map<dynamic, dynamic>).cast<String, dynamic>();
+      frame = (jsonDecode(raw as String) as Map<dynamic, dynamic>)
+          .cast<String, dynamic>();
+      final Object? rawEvent = frame['event'];
+
+      if (rawEvent is! String || rawEvent.isEmpty) {
+        throw const FormatException('missing event field');
+      }
+
+      event = rawEvent;
     } on Object catch (e) {
       AppLogger.error('dropped an unreadable frame', error: e);
 
       return;
     }
 
-    if (event == 'phx_reply') {
-      final Completer<ChannelReply>? completer = ref == null
-          ? null
-          : _pending.remove(ref);
-      final Object? status = payload['status'];
-      final Object? response = payload['response'];
+    final Object? requestId = frame['requestId'];
+    final Object? rawData = frame['data'];
+    final Map<String, dynamic> data = rawData is Map<dynamic, dynamic>
+        ? rawData.cast<String, dynamic>()
+        : <String, dynamic>{};
 
-      completer?.complete(
-        new ChannelReply(
-          status is String ? status : 'error',
-          response is Map<dynamic, dynamic>
-              ? response.cast<String, dynamic>()
-              : <String, dynamic>{},
-        ),
-      );
+    if (event == 'command.ack' || event == 'system.pong') {
+      final Completer<ChannelReply>? completer = requestId is String
+          ? _pending.remove(requestId)
+          : null;
+
+      completer?.complete(new ChannelReply('ok', data));
 
       return;
     }
 
-    if (event == 'phx_error' || event == 'phx_close') {
-      _onClosed();
+    if (event == 'command.error') {
+      final Object? rawError = frame['error'];
+      final Map<String, dynamic> error = rawError is Map<dynamic, dynamic>
+          ? rawError.cast<String, dynamic>()
+          : <String, dynamic>{};
+      final Completer<ChannelReply>? completer = requestId is String
+          ? _pending.remove(requestId)
+          : null;
+
+      if (completer != null) {
+        completer.complete(new ChannelReply('error', error));
+
+        return;
+      }
+
+      final Completer<ChannelEvent>? snapshot = _snapshotCompleter;
+
+      if (snapshot != null && !snapshot.isCompleted) {
+        final Object? reason = error['reason'];
+        snapshot.completeError(
+          new JoinRefusedException(reason is String ? reason : 'error'),
+        );
+      }
 
       return;
     }
 
-    _events.add(new ChannelEvent(event, payload));
+    final Object? rawSeq = frame['sequence'];
+    final Object? rawOccurred = frame['occurredAt'];
+    final ChannelEvent channelEvent = new ChannelEvent(
+      event,
+      data,
+      eventId: frame['eventId'] as String?,
+      orderId: frame['orderId'] as String?,
+      sequence: rawSeq is num ? rawSeq.toInt() : null,
+      occurredAt: rawOccurred is String ? DateTime.tryParse(rawOccurred) : null,
+    );
+
+    final Completer<ChannelEvent>? snapshot = _snapshotCompleter;
+
+    if (event == 'matching.job.snapshot' &&
+        snapshot != null &&
+        !snapshot.isCompleted) {
+      snapshot.complete(channelEvent);
+
+      return;
+    }
+
+    if (!_events.isClosed) {
+      _events.add(channelEvent);
+    }
   }
 
   void _onClosed() {
+    final Completer<ChannelEvent>? snapshot = _snapshotCompleter;
+
+    if (snapshot != null && !snapshot.isCompleted) {
+      snapshot.completeError(const ChannelException('socket closed'));
+
+      return;
+    }
+
     if (_session == null) {
       return;
     }
@@ -371,19 +444,19 @@ class ChannelClient {
       return;
     }
 
-    final String ref = (++_ref).toString();
+    final String requestId = _nextRequestId();
     final Completer<ChannelReply> completer = new Completer<ChannelReply>();
 
     _probing = true;
-    _pending[ref] = completer;
+    _pending[requestId] = completer;
     socket.add(
-      jsonEncode(<dynamic>[
-        null,
-        ref,
-        'phoenix',
-        'heartbeat',
-        <String, dynamic>{},
-      ]),
+      jsonEncode(<String, dynamic>{
+        'event': 'system.ping',
+        'requestId': requestId,
+        'schemaVersion': schemaVersion,
+        'sentAt': DateTime.now().toUtc().toIso8601String(),
+        'data': <String, dynamic>{},
+      }),
     );
 
     unawaited(
@@ -395,7 +468,7 @@ class ChannelClient {
             },
             onError: (Object e) {
               _probing = false;
-              _pending.remove(ref);
+              _pending.remove(requestId);
 
               if (identical(_socket, socket)) {
                 AppLogger.debug('heartbeat unanswered, reconnecting: $e');
@@ -432,10 +505,16 @@ class ChannelClient {
     _heartbeatTimer?.cancel();
     _probing = false;
 
+    final Completer<ChannelEvent>? snapshot = _snapshotCompleter;
+    _snapshotCompleter = null;
+
+    if (snapshot != null && !snapshot.isCompleted) {
+      snapshot.completeError(const ChannelException('socket closed'));
+    }
+
     final ChannelSocket? socket = _socket;
 
     _socket = null;
-    _joinRef = null;
 
     for (final Completer<ChannelReply> c in _pending.values) {
       if (!c.isCompleted) {

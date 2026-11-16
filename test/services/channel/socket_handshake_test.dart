@@ -16,7 +16,7 @@ void main() {
     token: token,
     refreshToken: 'refresh',
   );
-  final RegExp httpToken = new RegExp(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$");
+  final RegExp bearerHeader = new RegExp(r'^Bearer [^\s]+$');
 
   final List<WebSocket> accepted = <WebSocket>[];
   HttpServer? server;
@@ -115,42 +115,31 @@ void main() {
   });
 
   test(
-    'the socket is the gateway route with the token in the protocol header, never in the URL',
+    'the socket connects to /ws/v1/events with the bearer token in Authorization header, never in the URL',
     () async {
       Uri? requested;
-      List<String> offered = <String>[];
+      String? authHeader;
       final HttpServer bound = await serve((HttpRequest request) async {
         requested = request.uri;
-        offered = (request.headers['sec-websocket-protocol'] ?? <String>[])
-            .expand((String value) => value.split(','))
-            .map((String protocol) => protocol.trim())
-            .toList();
+        authHeader = request.headers.value(HttpHeaders.authorizationHeader);
 
-        final WebSocket socket = await WebSocketTransformer.upgrade(
-          request,
-          protocolSelector: (List<String> protocols) => 'phoenix',
-        );
+        final WebSocket socket = await WebSocketTransformer.upgrade(request);
 
         accepted.add(socket);
-        socket.listen((Object? frame) {
-          final List<dynamic> message =
-              jsonDecode(frame! as String) as List<dynamic>;
-
-          if (message[3] == 'phx_join') {
-            socket.add(
-              jsonEncode(<dynamic>[
-                message[0],
-                message[1],
-                message[2],
-                'phx_reply',
-                <String, dynamic>{
-                  'status': 'ok',
-                  'response': <String, dynamic>{'status': 'offline'},
-                },
-              ]),
-            );
-          }
-        });
+        socket.add(
+          jsonEncode(<String, dynamic>{
+            'event': 'matching.job.snapshot',
+            'eventId': '019a0000-0000-7000-8000-000000000001',
+            'schemaVersion': 1,
+            'orderId': null,
+            'sequence': null,
+            'occurredAt': '2026-11-16T00:00:00Z',
+            'data': <String, dynamic>{
+              'dutyStatus': 'offline',
+              'activeOrder': null,
+            },
+          }),
+        );
       });
       final ChannelClient sut = client = new ChannelClient();
 
@@ -158,19 +147,10 @@ void main() {
 
       expect(sut.status, ConnectionStatus.connected);
       expect(sut.joinStatus, 'offline');
-      expect(requested!.path, '/ws/v1/matching/driver');
-      expect(requested!.queryParameters, <String, String>{'vsn': '2.0.0'});
-      expect(offered.first, 'phoenix');
-      expect(offered, everyElement(matches(httpToken)));
-
-      final String encoded = offered
-          .singleWhere(
-            (String protocol) => protocol.startsWith('base64url.bearer.phx.'),
-          )
-          .substring('base64url.bearer.phx.'.length);
-
-      expect(encoded, matches(new RegExp(r'^[A-Za-z0-9+/]+$')));
-      expect(utf8.decode(base64.decode(base64.normalize(encoded))), token);
+      expect(requested!.path, '/ws/v1/events');
+      expect(requested!.queryParameters, isEmpty);
+      expect(authHeader, matches(bearerHeader));
+      expect(authHeader, 'Bearer $token');
     },
   );
 }

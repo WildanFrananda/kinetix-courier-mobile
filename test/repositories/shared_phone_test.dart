@@ -16,20 +16,40 @@ import 'package:mocktail/mocktail.dart';
 class _MockLocation extends Mock implements LocationService {}
 
 class _MatchingSocket implements ChannelSocket {
-  _MatchingSocket({required this.reachable});
+  _MatchingSocket({required this.reachable, required this.authorization}) {
+    scheduleMicrotask(() {
+      if (reachable && !_in.isClosed) {
+        _in.add(
+          jsonEncode(<String, dynamic>{
+            'event': 'matching.job.snapshot',
+            'eventId': '019a0000-0000-7000-8000-000000000001',
+            'schemaVersion': 1,
+            'orderId': null,
+            'sequence': null,
+            'occurredAt': '2026-11-16T00:00:00Z',
+            'data': <String, dynamic>{
+              'dutyStatus': 'offline',
+              'activeOrder': null,
+            },
+          }),
+        );
+      }
+    });
+  }
 
   final bool reachable;
+  final Object? authorization;
   final StreamController<dynamic> _in = new StreamController<dynamic>();
-  final List<List<dynamic>> frames = <List<dynamic>>[];
+  final List<Map<String, dynamic>> frames = <Map<String, dynamic>>[];
 
   void drop() => unawaited(_in.close());
 
-  List<String> batchedTimesOn(String topic) => <String>[
-    for (final List<dynamic> frame in frames)
-      if (frame[2] == topic && frame[3] == 'ping_batch')
+  List<String> batchedTimes() => <String>[
+    for (final Map<String, dynamic> frame in frames)
+      if (frame['event'] == 'courier.location.batch')
         for (final Object? ping
-            in (frame[4] as Map<String, dynamic>)['pings'] as List<dynamic>)
-          (ping! as Map<String, dynamic>)['recorded_at'] as String,
+            in (frame['data'] as Map<String, dynamic>)['pings'] as List<dynamic>)
+          (ping! as Map<String, dynamic>)['recordedAt'] as String,
   ];
 
   @override
@@ -42,30 +62,33 @@ class _MatchingSocket implements ChannelSocket {
 
   @override
   void add(String data) {
-    final List<dynamic> frame = jsonDecode(data) as List<dynamic>;
+    final Map<String, dynamic> frame =
+        (jsonDecode(data) as Map<dynamic, dynamic>).cast<String, dynamic>();
 
     frames.add(frame);
     _in.add(
-      jsonEncode(<dynamic>[
-        frame[0],
-        frame[1],
-        frame[2],
-        'phx_reply',
-        <String, dynamic>{'status': 'ok', 'response': _answerTo(frame)},
-      ]),
+      jsonEncode(<String, dynamic>{
+        'event': frame['event'] == 'system.ping'
+            ? 'system.pong'
+            : 'command.ack',
+        'requestId': frame['requestId'],
+        'schemaVersion': 1,
+        'occurredAt': '2026-11-16T00:00:00Z',
+        'data': _answerTo(frame),
+      }),
     );
   }
 
-  Map<String, dynamic> _answerTo(List<dynamic> frame) {
-    final Map<String, dynamic> payload = frame[4] as Map<String, dynamic>;
+  Map<String, dynamic> _answerTo(Map<String, dynamic> frame) {
+    final Map<String, dynamic> data =
+        (frame['data'] as Map<dynamic, dynamic>? ?? <dynamic, dynamic>{})
+            .cast<String, dynamic>();
 
-    return switch (frame[3]) {
-      'phx_join' => <String, dynamic>{'status': 'offline'},
-      'status' => <String, dynamic>{'status': payload['status']},
-      'ping_batch' => <String, dynamic>{
+    return switch (frame['event']) {
+      'courier.duty.set' => <String, dynamic>{'status': data['status']},
+      'courier.location.batch' => <String, dynamic>{
         'stored': <int>[
-          for (int i = 0; i < (payload['pings'] as List<dynamic>).length; i++)
-            i,
+          for (int i = 0; i < (data['pings'] as List<dynamic>).length; i++) i,
         ],
         'duplicates': <int>[],
         'refused': <Map<String, dynamic>>[],
@@ -130,9 +153,13 @@ void main() {
     ).thenAnswer((_) async {});
     when(() => location.positions()).thenAnswer((_) => positions.stream);
 
-    channel = new ChannelClient.withConnector((Uri _, Iterable<String> _) {
+    channel = new ChannelClient.withConnector((
+      Uri _,
+      Map<String, dynamic> headers,
+    ) {
       final _MatchingSocket socket = new _MatchingSocket(
         reachable: edgeReachable,
+        authorization: headers['Authorization'],
       );
 
       sockets.add(socket);
@@ -195,8 +222,9 @@ void main() {
       await settle();
 
       expect(channel.status, ConnectionStatus.connected);
+      expect(sockets.last.authorization, 'Bearer token-b');
       expect(
-        sockets.last.batchedTimesOn('driver:2'),
+        sockets.last.batchedTimes(),
         isNot(contains(fixTime.toIso8601String())),
       );
     },
@@ -241,9 +269,8 @@ void main() {
       await channel.connect(courierA, wsBase: 'wss://edge.test');
       await settle();
 
-      expect(sockets.last.batchedTimesOn('driver:1'), <String>[
-        fixTime.toIso8601String(),
-      ]);
+      expect(sockets.last.authorization, 'Bearer token-a');
+      expect(sockets.last.batchedTimes(), <String>[fixTime.toIso8601String()]);
       expect(await store.count(), 0);
     },
     timeout: const Timeout(Duration(seconds: 30)),

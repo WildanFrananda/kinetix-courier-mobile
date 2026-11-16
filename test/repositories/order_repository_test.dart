@@ -37,11 +37,12 @@ void main() {
 
   Map<String, dynamic> orderJson(int id, String status) => <String, dynamic>{
     'id': id,
+    'orderNumber': 'KTX-$id',
     'status': status,
-    'weight_kg': 10,
+    'weightKg': 10,
     'pickup': <String, dynamic>{'latitude': 1.0, 'longitude': 2.0},
     'dropoff': <String, dynamic>{'latitude': 3.0, 'longitude': 4.0},
-    'assigned_at': '2026-01-01T00:00:00Z',
+    'assignedAt': '2026-01-01T00:00:00Z',
   };
 
   setUpAll(() {
@@ -81,45 +82,57 @@ void main() {
     return seen;
   }
 
-  test('maps order_assigned to an active job', () async {
+  test('maps matching.job.assigned to an active job', () async {
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      new ChannelEvent('order_assigned', orderJson(1, 'assigned')),
+      new ChannelEvent('matching.job.assigned', <String, dynamic>{
+        'order': orderJson(1, 'assigned'),
+      }),
     ]);
 
     final Order order = (seen.single as JobActive).order;
     expect(order.id.value, 1);
+    expect(order.orderNumber, 'KTX-1');
     expect(order.status, OrderStatus.assigned);
   });
 
-  test('active_order null is no active job', () async {
+  test('matching.job.snapshot activeOrder null is no active job', () async {
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      const ChannelEvent('active_order', <String, dynamic>{'order': null}),
+      const ChannelEvent('matching.job.snapshot', <String, dynamic>{
+        'dutyStatus': 'online',
+        'activeOrder': null,
+      }),
     ]);
 
     expect(seen.single, isA<JobNone>());
   });
 
-  test('order_updated cancelled names the cancelled job', () async {
+  test('matching.job.updated cancelled names the cancelled job', () async {
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      new ChannelEvent('order_updated', orderJson(2, 'cancelled')),
+      new ChannelEvent('matching.job.updated', <String, dynamic>{
+        'order': orderJson(2, 'cancelled'),
+      }),
     ]);
 
     expect((seen.single as JobCancelled).id, const OrderId(2));
   });
 
   test(
-    'an order_updated this app cannot read says nothing, never a cancellation',
+    'a matching.job.updated this app cannot read says nothing, never a cancellation',
     () async {
       final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-        const ChannelEvent('order_updated', <String, dynamic>{
-          'id': 'two',
-          'status': 'cancelled',
-          'assigned_at': '2026-01-01T00:00:00Z',
+        const ChannelEvent('matching.job.updated', <String, dynamic>{
+          'order': <String, dynamic>{
+            'id': 'two',
+            'status': 'cancelled',
+            'assignedAt': '2026-01-01T00:00:00Z',
+          },
         }),
-        const ChannelEvent('order_updated', <String, dynamic>{
-          'id': 2,
-          'status': 'assigned',
-          'assigned_at': '2026-01-01T00:00:00Z',
+        const ChannelEvent('matching.job.updated', <String, dynamic>{
+          'order': <String, dynamic>{
+            'id': 2,
+            'status': 'assigned',
+            'assignedAt': '2026-01-01T00:00:00Z',
+          },
         }),
       ]);
 
@@ -185,14 +198,14 @@ void main() {
       when(() => uploader.read(any())).thenAnswer((_) async => photo);
       when(() => channel.podUpload(any(), any())).thenAnswer(
         (_) async => new ChannelReply('ok', <String, dynamic>{
-          'upload_url':
+          'uploadUrl':
               'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg?X-Amz-Signature=s',
-          'upload_headers': <String, dynamic>{
+          'uploadHeaders': <String, dynamic>{
             'if-none-match': '*',
             'x-amz-checksum-sha256':
                 'ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=',
           },
-          'photo_url':
+          'photoUrl':
               'https://storage.test/kinetix-pod/pod/1/$photoSha256.jpg',
         }),
       );
@@ -230,8 +243,8 @@ void main() {
       when(() => uploader.read(any())).thenAnswer((_) async => photo);
       when(() => channel.podUpload(any(), any())).thenAnswer(
         (_) async => const ChannelReply('ok', <String, dynamic>{
-          'upload_url': 'https://storage.test/u',
-          'photo_url': 'https://storage.test/p',
+          'uploadUrl': 'https://storage.test/u',
+          'photoUrl': 'https://storage.test/p',
         }),
       );
       when(() => uploader.upload(any(), any(), any())).thenAnswer((_) async {});
@@ -290,8 +303,8 @@ void main() {
     when(() => uploader.read(any())).thenAnswer((_) async => photo);
     when(() => channel.podUpload(any(), any())).thenAnswer(
       (_) async => const ChannelReply('ok', <String, dynamic>{
-        'upload_url': 'https://storage.test/u',
-        'photo_url': 'https://storage.test/p',
+        'uploadUrl': 'https://storage.test/u',
+        'photoUrl': 'https://storage.test/p',
       }),
     );
     when(
@@ -325,7 +338,9 @@ void main() {
 
   test('a job taken off the courier names it', () async {
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      const ChannelEvent('order_unassigned', <String, dynamic>{'id': 3}),
+      const ChannelEvent('matching.job.unassigned', <String, dynamic>{
+        'id': 3,
+      }),
     ]);
 
     expect((seen.single as JobUnassigned).id, const OrderId(3));
@@ -333,13 +348,22 @@ void main() {
 
   test('a pending job is never read as an order', () async {
     final Map<String, dynamic> pending = orderJson(4, 'pending')
-      ..['assigned_at'] = null;
+      ..['assignedAt'] = null;
 
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      new ChannelEvent('order_assigned', pending),
-      new ChannelEvent('order_updated', pending),
-      new ChannelEvent('active_order', <String, dynamic>{'order': pending}),
-      new ChannelEvent('order_assigned', orderJson(5, 'assigned')),
+      new ChannelEvent('matching.job.assigned', <String, dynamic>{
+        'order': pending,
+      }),
+      new ChannelEvent('matching.job.updated', <String, dynamic>{
+        'order': pending,
+      }),
+      new ChannelEvent('matching.job.snapshot', <String, dynamic>{
+        'dutyStatus': 'online',
+        'activeOrder': pending,
+      }),
+      new ChannelEvent('matching.job.assigned', <String, dynamic>{
+        'order': orderJson(5, 'assigned'),
+      }),
     ]);
 
     expect(seen, hasLength(2));
@@ -349,11 +373,15 @@ void main() {
 
   test('a job this app cannot read does not end the stream', () async {
     final List<JobUpdate> seen = await updatesFor(<ChannelEvent>[
-      const ChannelEvent('order_assigned', <String, dynamic>{
-        'id': 'seven',
-        'assigned_at': '2026-01-01T00:00:00Z',
+      const ChannelEvent('matching.job.assigned', <String, dynamic>{
+        'order': <String, dynamic>{
+          'id': 'seven',
+          'assignedAt': '2026-01-01T00:00:00Z',
+        },
       }),
-      new ChannelEvent('order_assigned', orderJson(5, 'assigned')),
+      new ChannelEvent('matching.job.assigned', <String, dynamic>{
+        'order': orderJson(5, 'assigned'),
+      }),
     ]);
 
     expect((seen.single as JobActive).order.id, const OrderId(5));
@@ -548,8 +576,8 @@ void main() {
       when(() => uploader.read(any())).thenAnswer((_) async => photo);
       when(() => channel.podUpload(any(), any())).thenAnswer(
         (_) async => const ChannelReply('ok', <String, dynamic>{
-          'upload_url': 'https://storage.test/u',
-          'photo_url': 'https://storage.test/p',
+          'uploadUrl': 'https://storage.test/u',
+          'photoUrl': 'https://storage.test/p',
         }),
       );
       when(() => uploader.upload(any(), any(), any())).thenAnswer((_) async {});

@@ -8,11 +8,11 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class WsChannelSocket implements ChannelSocket {
   WsChannelSocket(this._channel);
 
-  factory WsChannelSocket.connect(Uri uri, Iterable<String> protocols) {
+  factory WsChannelSocket.connect(Uri uri, Map<String, dynamic> headers) {
     return new WsChannelSocket(
       new IOWebSocketChannel.connect(
         uri,
-        protocols: protocols,
+        headers: headers,
         connectTimeout: _connectTimeout,
       ),
     );

@@ -54,7 +54,5 @@ abstract final class AppConfig {
 
   static const String matchingPath = '/api/v1/matching';
 
-  static const String driverSocketPath = '/ws/v1/matching/driver';
-
-  static const String socketProtocolVersion = '2.0.0';
+  static const String driverSocketPath = '/ws/v1/events';
 }
